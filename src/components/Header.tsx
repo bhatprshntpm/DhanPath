@@ -12,7 +12,7 @@ export default function Header({ onEditProfile }: HeaderProps) {
       <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-2">
 
         <div className="flex items-center gap-2.5">
-          <img src="/DhanPath/logo.png" alt="DhanPath logo" className="h-9 sm:h-10 w-auto object-contain" />
+          <img src="/DhanPath/logo.png" alt="DhanPath logo" className="h-9 sm:h-10 w-auto object-contain mix-blend-multiply" />
           <div className="hidden sm:flex flex-col leading-tight">
             <span className="text-base font-bold tracking-tight text-[#2d5a27]">DhanPath</span>
             <span className="text-[10px] font-medium text-[#5a8a4a] tracking-wide">Navigate, Plan, Prosper</span>

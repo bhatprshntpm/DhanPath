@@ -177,7 +177,7 @@ export default function OnboardingWizard({ forceOpen, onClose }: { forceOpen?: b
             <div className="flex flex-col gap-6">
               <div>
                 <div className="flex items-center justify-center gap-2 mb-4">
-                  <img src="/DhanPath/logo.png" alt="DhanPath" className="h-12 w-auto" />
+                  <img src="/DhanPath/logo.png" alt="DhanPath" className="h-12 w-auto mix-blend-multiply" />
                   <div className="flex flex-col leading-tight">
                     <span className="text-lg font-bold text-[#2d5a27]">DhanPath</span>
                     <span className="text-[10px] text-[#5a8a4a] font-medium">Navigate, Plan, Prosper</span>

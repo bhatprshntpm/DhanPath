@@ -61,7 +61,7 @@ function AppContent() {
         <section id="section-scenarios"><ScenarioPanel /></section>
       </main>
       <footer className="text-center py-10 flex flex-col items-center gap-2">
-        <img src="/DhanPath/logo.png" alt="DhanPath" className="h-8 w-auto opacity-30" />
+        <img src="/DhanPath/logo.png" alt="DhanPath" className="h-8 w-auto opacity-30 mix-blend-multiply" />
         <p className="text-xs text-surface-300">DhanPath — Navigate, Plan, Prosper</p>
         <p className="text-xs text-surface-300">All data stored locally on your device. Nothing leaves your browser.</p>
       </footer>
