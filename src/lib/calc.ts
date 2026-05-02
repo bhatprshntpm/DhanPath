@@ -1,10 +1,28 @@
 import type { NetWorthSnapshot, Debt, Scenario, Settings, Transaction, Goal } from '../types'
 
-export function fmt(value: number, currency = 'USD'): string {
+export function fmt(value: number, currency = 'INR'): string {
+  if (currency === 'INR') return fmtINR(value)
   return new Intl.NumberFormat('en-US', {
     style: 'currency', currency,
     maximumFractionDigits: 0,
   }).format(value)
+}
+
+export function fmtINR(n: number): string {
+  if (n === null || n === undefined || isNaN(n)) return '₹0'
+  const sign = n < 0 ? '-' : ''
+  const abs  = Math.abs(n)
+  if (abs >= 1e7)  return `${sign}₹${(abs / 1e7).toFixed(2)} Cr`
+  if (abs >= 1e5)  return `${sign}₹${(abs / 1e5).toFixed(2)} L`
+  if (abs >= 1000) return `${sign}₹${(abs / 1000).toFixed(1)}k`
+  return `${sign}₹${abs.toFixed(0)}`
+}
+
+export function fmtINRFull(n: number): string {
+  if (isNaN(n)) return '₹0'
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency', currency: 'INR', maximumFractionDigits: 0,
+  }).format(n)
 }
 
 export function fmtPct(value: number): string {
