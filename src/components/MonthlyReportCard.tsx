@@ -49,7 +49,7 @@ export default function MonthlyReportCard() {
   const rows = [
     { label: 'Income',   value: fmtINR(cf.income),   status: cf.income >= monthlyIncome * 0.95 ? '✅' : '⚠️',   sub: monthlyIncome > 0 ? `target ${fmtINR(monthlyIncome)}` : '' },
     { label: 'Expenses', value: fmtINR(cf.expenses),  status: expVsBudget <= 100 ? '✅' : '⚠️',                  sub: expChange !== 0 ? `${expChange > 0 ? '+' : ''}${expChange.toFixed(0)}% vs last month` : '' },
-    { label: 'Saved',    value: fmtINR(cf.net),        status: cf.net > 0 ? '🎉' : '🚨',                          sub: cf.income > 0 ? `${Math.round(savingsRate)}% savings rate` : '' },
+    { label: 'Saved',    value: fmtINR(cf.net),        status: cf.net > 0 ? '✓' : '!',                          sub: cf.income > 0 ? `${Math.round(savingsRate)}% savings rate` : '' },
     { label: 'SIP',      value: fmtINR(baseline?.assumptions.extraMonthlySavings ?? 0), status: (baseline?.assumptions.extraMonthlySavings ?? 0) > 0 ? '✅' : '⚠️', sub: 'on track' },
   ]
 
@@ -62,7 +62,7 @@ export default function MonthlyReportCard() {
         </div>
         <div className="text-center">
           <p className={`text-3xl font-bold ${color}`}>{grade}</p>
-          {isBestMonth && <p className="text-[10px] text-emerald-600 font-semibold">Best month! 🎉</p>}
+          {isBestMonth && <p className="text-[10px] text-emerald-600 font-semibold">Personal best</p>}
         </div>
       </div>
 

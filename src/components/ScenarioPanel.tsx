@@ -13,14 +13,14 @@ const PRESETS: Omit<Scenario, 'id'>[] = [
 ]
 
 const SLIDERS: { label: string; key: string; min: number; max: number; step: number; prefix?: string; suffix?: string }[] = [
-  { label: 'Monthly Income',      key: 'monthlyIncome',       min: 0,   max: 50000, step: 500,  prefix: '$' },
-  { label: 'Monthly Expenses',    key: 'monthlyExpenses',     min: 0,   max: 30000, step: 250,  prefix: '$' },
+  { label: 'Monthly Income',      key: 'monthlyIncome',       min: 0,   max: 50000, step: 500,  prefix: '₹' },
+  { label: 'Monthly Expenses',    key: 'monthlyExpenses',     min: 0,   max: 30000, step: 250,  prefix: '₹' },
   { label: 'Equity Return',       key: 'equityReturn',        min: 0,   max: 25,    step: 0.5,  suffix: '%' },
   { label: 'Debt Return',         key: 'debtReturn',          min: 0,   max: 15,    step: 0.5,  suffix: '%' },
   { label: 'Equity Allocation',   key: 'equityAllocation',    min: 0,   max: 100,   step: 5,    suffix: '%' },
   { label: 'SIP Step-up/yr',      key: 'sipStepUp',           min: 0,   max: 30,    step: 1,    suffix: '%' },
   { label: 'Income Growth/yr',    key: 'incomeGrowthRate',    min: 0,   max: 20,    step: 0.5,  suffix: '%' },
-  { label: 'Extra Savings/mo',    key: 'extraMonthlySavings', min: 0,   max: 10000, step: 100,  prefix: '$' },
+  { label: 'Extra Savings/mo',    key: 'extraMonthlySavings', min: 0,   max: 10000, step: 100,  prefix: '₹' },
   { label: 'Lifestyle (Retire)',  key: 'lifestyleMultiplier', min: 0.5, max: 2.0,   step: 0.1,  suffix: 'x' },
 ]
 

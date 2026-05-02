@@ -64,7 +64,6 @@ function ScoreReveal({ score, onDone }: { score: ReturnType<typeof calcHealthSco
 
       <div className="text-center">
         <div className="flex items-center justify-center gap-2 mb-1">
-          <span className="text-3xl">{label.emoji}</span>
           <span className="text-2xl font-bold" style={{ color: score.color }}>{score.grade}</span>
         </div>
         <p className="font-semibold text-surface-800">{label.text}</p>
@@ -97,11 +96,12 @@ function ScoreReveal({ score, onDone }: { score: ReturnType<typeof calcHealthSco
   )
 }
 
-export default function OnboardingWizard() {
+export default function OnboardingWizard({ forceOpen, onClose }: { forceOpen?: boolean; onClose?: () => void } = {}) {
   const { data, updateSettings, updateScenario, addDebt } = useApp()
-  const [open, setOpen]     = useState(() => !localStorage.getItem(ONBOARDING_KEY))
-  const [step, setStep]     = useState(0)
+  const [open, setOpen]           = useState(() => !localStorage.getItem(ONBOARDING_KEY))
+  const [step, setStep]           = useState(0)
   const [showScore, setShowScore] = useState(false)
+  const isOpen = forceOpen ?? open
 
   const [name, setName]         = useState('')
   const [age, setAge]           = useState(28)
@@ -139,12 +139,13 @@ export default function OnboardingWizard() {
   function done() {
     localStorage.setItem(ONBOARDING_KEY, '1')
     setOpen(false)
+    onClose?.()
   }
 
-  if (!open) return null
+  if (!isOpen) return null
 
   const steps = [
-    { title: "Namaste! 🙏", sub: "Let's set up your financial profile" },
+    { title: "Welcome to DhanPath", sub: "Set up your financial profile" },
     { title: "Your Income",  sub: "What do you earn every month?" },
     { title: "Your Expenses", sub: "What do you spend every month?" },
     { title: "Your Investments", sub: "Are you investing regularly?" },
@@ -203,7 +204,9 @@ export default function OnboardingWizard() {
                       {LIFE_STAGES.map(ls => (
                         <button key={ls.label} onClick={() => applyLifeStage(ls)}
                           className="flex items-center gap-3 p-3 rounded-xl border border-surface-100 hover:border-amber-400 hover:bg-amber-50 transition-colors text-left">
-                          <span className="text-2xl">{ls.emoji}</span>
+                          <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
+                            <span className="text-xs font-bold text-amber-600">{ls.age}</span>
+                          </div>
                           <div>
                             <div className="text-sm font-semibold text-surface-800">{ls.label}</div>
                             <div className="text-xs text-surface-300">Age ~{ls.age} · ₹{(ls.income/1000).toFixed(0)}k/mo income</div>
@@ -283,7 +286,7 @@ export default function OnboardingWizard() {
                 <div className="flex flex-col gap-4">
                   {loans.length === 0 && (
                     <div className="p-4 bg-emerald-50 rounded-xl text-center">
-                      <p className="text-emerald-700 font-medium text-sm">🎉 No loans — great start!</p>
+                      <p className="text-emerald-700 font-medium text-sm">No active loans — great start!</p>
                       <p className="text-xs text-emerald-600 mt-1">You can still add them if you have any</p>
                     </div>
                   )}
@@ -376,7 +379,7 @@ export default function OnboardingWizard() {
                   </button>
                 ) : (
                   <button onClick={finish} className="btn-primary flex-1 flex items-center justify-center gap-1">
-                    See my score 🎯
+                    See my score
                   </button>
                 )}
               </div>

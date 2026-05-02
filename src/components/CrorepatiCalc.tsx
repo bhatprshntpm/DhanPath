@@ -97,7 +97,7 @@ export default function CrorepatiCalc() {
             <p className="text-xs text-amber-600 mb-1">At current trajectory</p>
             <p className="text-2xl font-bold text-amber-700">Age {hitAge}</p>
             <p className="text-sm text-amber-600">{yrsAway} years from now · {hitYear}</p>
-            {pct >= 100 && <p className="text-xs text-emerald-600 font-semibold mt-1">🎉 Already achieved!</p>}
+            {pct >= 100 && <p className="text-xs text-emerald-600 font-semibold mt-1">Already achieved!</p>}
           </>
         ) : (
           <p className="text-sm text-surface-300">Set your income & SIP in the Scenario panel to see projections</p>

@@ -3,7 +3,7 @@ import {
   Tooltip, ResponsiveContainer, CartesianGrid, Area, Cell,
 } from 'recharts'
 import { useApp } from '../context/AppContext'
-import { projectLifetime, projectLifetimeNoGoals, netWorth, fmt } from '../lib/calc'
+import { projectLifetime, projectLifetimeNoGoals, netWorth, fmtINR } from '../lib/calc'
 import type { ProjectionPoint } from '../lib/calc'
 
 const SCENARIO_COLORS = ['#f59e0b', '#6366f1', '#10b981', '#ef4444', '#8b5cf6', '#ec4899']
@@ -28,7 +28,7 @@ function CustomTooltip({ active, payload, label }: any) {
         p.value != null && Math.abs(p.value) > 0 ? (
           <p key={p.dataKey} style={{ color: p.color ?? '#f59e0b' }} className="flex justify-between gap-6">
             <span>{p.name}</span>
-            <span className="font-mono font-medium">{fmt(p.value)}</span>
+            <span className="font-mono font-medium">{fmtINR(p.value)}</span>
           </p>
         ) : null
       )}
@@ -161,7 +161,7 @@ export default function LifetimeTimeline() {
           <XAxis dataKey="year" tick={{ fontSize: 11, fill: '#a8a29e' }} tickLine={false} axisLine={false}
             interval={Math.floor(years.length / 8)} />
           <YAxis
-            tickFormatter={v => v >= 1e6 ? `$${(v / 1e6).toFixed(1)}M` : `$${(v / 1e3).toFixed(0)}k`}
+            tickFormatter={v => v >= 1e7 ? `₹${(v / 1e7).toFixed(1)}Cr` : v >= 1e5 ? `₹${(v / 1e5).toFixed(0)}L` : `₹${(v / 1e3).toFixed(0)}k`}
             tick={{ fontSize: 11, fill: '#a8a29e' }} tickLine={false} axisLine={false} width={64}
           />
           <Tooltip content={<CustomTooltip />} />
@@ -210,7 +210,7 @@ export default function LifetimeTimeline() {
               <span key={g.id} className="flex items-center gap-1 text-xs text-surface-300">
                 <span>{g.emoji}</span>
                 <span className="font-medium text-surface-800">{g.name}</span>
-                <span>Age {g.targetAge} · {fmt(Math.round(inf))}</span>
+                <span>Age {g.targetAge} · {fmtINR(Math.round(inf))}</span>
               </span>
             )
           })}
@@ -227,10 +227,10 @@ export default function LifetimeTimeline() {
           <XAxis dataKey="year" tick={{ fontSize: 10, fill: '#a8a29e' }} tickLine={false} axisLine={false}
             interval={Math.floor(years.length / 8)} />
           <YAxis
-            tickFormatter={v => `$${(v / 1e3).toFixed(0)}k`}
+            tickFormatter={v => v >= 1e5 ? `₹${(v / 1e5).toFixed(0)}L` : `₹${(v / 1e3).toFixed(0)}k`}
             tick={{ fontSize: 10, fill: '#a8a29e' }} tickLine={false} axisLine={false} width={64}
           />
-          <Tooltip formatter={(v: any) => [fmt(v as number), 'Monthly net']} labelFormatter={(l: any) => `Year ${l}`} />
+          <Tooltip formatter={(v: any) => [fmtINR(v as number), 'Monthly net']} labelFormatter={(l: any) => `Year ${l}`} />
           <ReferenceLine y={0} stroke="#e7e5e4" />
           <Bar dataKey="netFlow" name="Monthly net" radius={[2, 2, 0, 0]}>
             {chartData.map((entry, i) => (

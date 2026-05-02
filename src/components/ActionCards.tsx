@@ -52,7 +52,7 @@ function useActionCards(): ActionCard[] {
   if (!snapshots.length) {
     cards.push({
       priority: 'high',
-      icon: '📸',
+      icon: '',
       title: 'Add your first Net Worth snapshot',
       body: 'Record your assets and liabilities today. This seeds your Lifetime Timeline and unlocks all projections.',
       cta: 'Add snapshot →',
@@ -64,7 +64,7 @@ function useActionCards(): ActionCard[] {
   if (!baseline?.assumptions.monthlyIncome) {
     cards.push({
       priority: 'high',
-      icon: '⚙️',
+      icon: '',
       title: 'Set your income & expenses',
       body: 'Your Baseline scenario needs your monthly income and expenses to calculate projections, savings rate, and FIRE date.',
       cta: 'Open Scenario panel →',
@@ -76,7 +76,7 @@ function useActionCards(): ActionCard[] {
     const needed = monthlyExp * 3 - liquid
     cards.push({
       priority: 'high',
-      icon: '🚨',
+      icon: '',
       title: 'Build your Emergency Fund',
       body: `You have ${emergencyMonths.toFixed(1)} months covered. Target is 3 months (${fmtINR(needed)} more in savings/checking).`,
       cta: 'Update savings balance →',
@@ -88,7 +88,7 @@ function useActionCards(): ActionCard[] {
   if (highestRateDebt && highestRateDebt.rate > 10) {
     cards.push({
       priority: 'high',
-      icon: '💣',
+      icon: '',
       title: `Pay off ${highestRateDebt.name} first`,
       body: `At ${highestRateDebt.rate}% APR this costs you the most. Use the Debt Simulator to see how extra payments help.`,
       cta: 'Open Debt Simulator →',
@@ -102,7 +102,7 @@ function useActionCards(): ActionCard[] {
     const growth = Math.round(extra * 12 * ((Math.pow(1.12, 20) - 1) / 0.12))
     cards.push({
       priority: 'quick',
-      icon: '💡',
+      icon: '',
       title: `Increase SIP by ${fmtINR(extra)}/mo`,
       body: `You're saving ${Math.round(savingsRate)}% — you have room. That extra ${fmtINR(extra)}/mo becomes ${fmtINR(growth)} in 20 years.`,
       cta: 'Simulate in Scenarios →',
@@ -114,7 +114,7 @@ function useActionCards(): ActionCard[] {
     const suggested = Math.round((monthlyIncome - monthlyExp) * 0.5)
     cards.push({
       priority: 'quick',
-      icon: '🚀',
+      icon: '',
       title: 'Start your first SIP today',
       body: `You can invest ${fmtINR(suggested)}/month from your surplus. Set it in the Baseline scenario to see your FIRE date.`,
       cta: 'Set SIP in Scenarios →',
@@ -125,7 +125,7 @@ function useActionCards(): ActionCard[] {
   if (debts.length === 0 && snapshots.length) {
     cards.push({
       priority: 'quick',
-      icon: '🎯',
+      icon: '',
       title: 'Add your life goals',
       body: 'Add goals like home, education, or car. They appear as pins on your Lifetime Timeline and affect your projections.',
       cta: 'Add goals →',
@@ -137,7 +137,7 @@ function useActionCards(): ActionCard[] {
   if (transactions.length === 0) {
     cards.push({
       priority: 'quick',
-      icon: '🏦',
+      icon: '',
       title: 'Import your bank statement',
       body: 'Upload your bank CSV to auto-populate your income and expenses. HDFC, ICICI, SBI, Axis, Kotak all supported.',
       cta: 'Open Import →',
@@ -149,7 +149,7 @@ function useActionCards(): ActionCard[] {
   if (cf.net > 0 && transactions.length > 0) {
     cards.push({
       priority: 'insight',
-      icon: '🎉',
+      icon: '',
       title: `Saved ${fmtINR(cf.net)} this month`,
       body: `Savings rate: ${monthlyIncome > 0 ? Math.round((cf.net / monthlyIncome) * 100) : Math.round((cf.net / Math.max(cf.income, 1)) * 100)}%. ${cf.net > monthlyExp * 0.3 ? 'Consider putting extra into your SIP.' : 'Keep it up!'}`,
       cta: 'View Cash Flow →',
@@ -161,7 +161,7 @@ function useActionCards(): ActionCard[] {
   if (firePct > 0 && firePct < 100) {
     cards.push({
       priority: 'insight',
-      icon: '🔥',
+      icon: '',
       title: `${firePct.toFixed(1)}% to FIRE`,
       body: firePct < 25
         ? 'Focus on increasing savings rate and SIP step-up to accelerate your FIRE journey.'
@@ -177,9 +177,9 @@ function useActionCards(): ActionCard[] {
 }
 
 const PRIORITY_CONFIG = {
-  high:    { bg: 'bg-rose-50',   border: 'border-rose-200',   badge: 'bg-rose-100 text-rose-600',   label: '🚨 Needs Attention' },
-  quick:   { bg: 'bg-indigo-50', border: 'border-indigo-200', badge: 'bg-indigo-100 text-indigo-600', label: '💡 Quick Win'      },
-  insight: { bg: 'bg-amber-50',  border: 'border-amber-200',  badge: 'bg-amber-100 text-amber-700',  label: '📊 Insight'        },
+  high:    { bg: 'bg-rose-50',   border: 'border-rose-200',   badge: 'bg-rose-100 text-rose-600',   label: 'Needs Attention' },
+  quick:   { bg: 'bg-indigo-50', border: 'border-indigo-200', badge: 'bg-indigo-100 text-indigo-600', label: 'Quick Win'      },
+  insight: { bg: 'bg-amber-50',  border: 'border-amber-200',  badge: 'bg-amber-100 text-amber-700',  label: 'Insight'        },
 }
 
 export default function ActionCards() {
@@ -194,11 +194,10 @@ export default function ActionCards() {
           const cfg = PRIORITY_CONFIG[c.priority]
           return (
             <div key={i} className={`rounded-2xl border p-4 flex flex-col gap-2 ${cfg.bg} ${cfg.border}`}>
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between mb-2">
                 <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full ${cfg.badge}`}>
                   {cfg.label}
                 </span>
-                <span className="text-lg">{c.icon}</span>
               </div>
               <p className="text-sm font-semibold text-surface-800">{c.title}</p>
               <p className="text-xs text-surface-600 leading-relaxed">{c.body}</p>

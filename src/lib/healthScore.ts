@@ -78,11 +78,11 @@ export function calcHealthScore(data: AppData): HealthScoreBreakdown {
 }
 
 export const HEALTH_LABELS: Record<HealthScoreBreakdown['grade'], { emoji: string; text: string; sub: string }> = {
-  'A+': { emoji: '🏆', text: 'Exceptional',      sub: 'You are in the top tier. Keep it up!' },
-  'A':  { emoji: '🌟', text: 'Excellent',         sub: 'Great financial discipline. Nearly perfect.' },
-  'B+': { emoji: '💪', text: 'Very Good',         sub: 'Strong foundation. A few tweaks and you\'re elite.' },
-  'B':  { emoji: '👍', text: 'Good',              sub: 'On the right track. Room to grow.' },
-  'C+': { emoji: '📈', text: 'Improving',         sub: 'Making progress. Focus on savings and debt.' },
-  'C':  { emoji: '⚠️', text: 'Needs Attention',  sub: 'Some areas need urgent focus.' },
-  'D':  { emoji: '🚨', text: 'Critical',          sub: 'Time to take action. Start with an emergency fund.' },
+  'A+': { emoji: '', text: 'Exceptional',    sub: 'You are in the top tier. Keep it up!' },
+  'A':  { emoji: '', text: 'Excellent',       sub: 'Great financial discipline. Nearly perfect.' },
+  'B+': { emoji: '', text: 'Very Good',       sub: 'Strong foundation. A few tweaks and you\'re elite.' },
+  'B':  { emoji: '', text: 'Good',            sub: 'On the right track. Room to grow.' },
+  'C+': { emoji: '', text: 'Improving',       sub: 'Making progress. Focus on savings and debt.' },
+  'C':  { emoji: '', text: 'Needs Attention', sub: 'Some areas need urgent focus.' },
+  'D':  { emoji: '', text: 'Critical',        sub: 'Time to take action. Start with an emergency fund.' },
 }
