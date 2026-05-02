@@ -58,8 +58,10 @@ export default function App() {
           <section id="section-import"><ImportCard /></section>
           <section id="section-scenarios"><ScenarioPanel /></section>
         </main>
-        <footer className="text-center text-xs text-surface-300 py-8">
-          DhanPath · सब data आपके device पर · Nothing leaves your browser
+        <footer className="text-center text-xs text-surface-300 py-8 flex flex-col items-center gap-2">
+          <img src="/DhanPath/logo.png" alt="DhanPath" className="h-8 w-auto opacity-40" />
+          <span>DhanPath · Navigate, Plan, Prosper</span>
+          <span>सब data आपके device पर · Nothing leaves your browser</span>
         </footer>
       </div>
     </AppProvider>
