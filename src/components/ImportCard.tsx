@@ -523,7 +523,7 @@ export default function ImportCard() {
           <p className="section-title">Import Financial Data</p>
           <p className="text-xs text-surface-300">MF CAS · Bank CSV · Equity · Demat · EPF — all processed locally</p>
         </div>
-        <button className="btn-ghost" onClick={() => setExpanded(v => !v)}>
+        <button data-expand="import" className="btn-ghost" onClick={() => setExpanded(v => !v)}>
           {expanded ? <ChevronUp size={16}/> : <ChevronDown size={16}/>}
         </button>
       </div>

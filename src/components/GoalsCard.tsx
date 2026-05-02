@@ -149,7 +149,7 @@ export default function GoalsCard() {
             {data.goals.length} goal{data.goals.length !== 1 ? 's' : ''} · shown as emoji markers on the timeline
           </p>
         </div>
-        <button className="btn-ghost" onClick={() => setExpanded(v => !v)}>
+        <button data-expand="goals" className="btn-ghost" onClick={() => setExpanded(v => !v)}>
           {expanded ? <ChevronUp size={16}/> : <ChevronDown size={16}/>}
         </button>
       </div>

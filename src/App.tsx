@@ -12,9 +12,7 @@ import DebtCard from './components/DebtCard'
 import GoalsCard from './components/GoalsCard'
 import SipCalculator from './components/SipCalculator'
 import ImportCard from './components/ImportCard'
-import BadgesCard from './components/BadgesCard'
 import CrorepatiCalc from './components/CrorepatiCalc'
-import ChaiMoney from './components/ChaiMoney'
 import MonthlyReportCard from './components/MonthlyReportCard'
 import FireHorizon from './components/FireHorizon'
 import ScenarioPanel from './components/ScenarioPanel'
@@ -36,29 +34,29 @@ export default function App() {
             </div>
           </div>
 
-          <LifetimeTimeline />
-          <ChaiMoney />
+          <section id="section-timeline">
+            <LifetimeTimeline />
+          </section>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <NetWorthCard />
-            <CashFlowCard />
-            <PortfolioCard />
-            <DebtCard />
+            <section id="section-networth"><NetWorthCard /></section>
+            <section id="section-cashflow"><CashFlowCard /></section>
+            <section id="section-portfolio"><PortfolioCard /></section>
+            <section id="section-debt"><DebtCard /></section>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <GoalsCard />
+            <section id="section-goals"><GoalsCard /></section>
             <SipCalculator />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <CrorepatiCalc />
-            <BadgesCard />
+            <section id="section-crorepati"><CrorepatiCalc /></section>
+            <section id="section-fire"><FireHorizon /></section>
           </div>
 
-          <ImportCard />
-          <FireHorizon />
-          <ScenarioPanel />
+          <section id="section-import"><ImportCard /></section>
+          <section id="section-scenarios"><ScenarioPanel /></section>
         </main>
         <footer className="text-center text-xs text-surface-300 py-8">
           DhanPath · सब data आपके device पर · Nothing leaves your browser

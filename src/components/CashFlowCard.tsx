@@ -40,7 +40,7 @@ export default function CashFlowCard() {
     <div className="card p-5 flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <p className="section-title">Cash Flow</p>
-        <button className="btn-ghost" onClick={() => setExpanded(v => !v)}>
+        <button data-expand="cashflow" className="btn-ghost" onClick={() => setExpanded(v => !v)}>
           {expanded ? <ChevronUp size={16}/> : <ChevronDown size={16}/>}
         </button>
       </div>

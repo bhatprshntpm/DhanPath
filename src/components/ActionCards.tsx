@@ -1,12 +1,32 @@
 import { useApp } from '../context/AppContext'
 import { netWorth, monthlyCashFlow, fmtINR } from '../lib/calc'
 
+function scrollTo(sectionId: string, expandAttr?: string) {
+  const el = document.getElementById(sectionId)
+  if (!el) return
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  // Flash highlight
+  el.style.transition = 'outline 0.1s'
+  el.style.outline = '2px solid #f59e0b'
+  el.style.borderRadius = '16px'
+  setTimeout(() => { el.style.outline = 'none' }, 1800)
+  // Expand the card inside if it has a toggle button
+  if (expandAttr) {
+    setTimeout(() => {
+      const btn = el.querySelector<HTMLButtonElement>(`[data-expand="${expandAttr}"]`)
+      btn?.click()
+    }, 400)
+  }
+}
+
 interface ActionCard {
   priority: 'high' | 'quick' | 'insight'
   icon:     string
   title:    string
   body:     string
-  cta?:     string
+  cta:      string
+  section:  string
+  expand?:  string
 }
 
 function useActionCards(): ActionCard[] {
@@ -21,8 +41,7 @@ function useActionCards(): ActionCard[] {
     ? snapshots[snapshots.length - 1].assets.checking + snapshots[snapshots.length - 1].assets.savings : 0
   const savingsRate    = monthlyIncome > 0 ? ((monthlyIncome - monthlyExp) / monthlyIncome) * 100 : 0
   const emergencyMonths = monthlyExp > 0 ? liquid / monthlyExp : 0
-  // const totalDebt      = debts.reduce((a, d) => a + d.balance, 0)
-  const highestRateDebt = debts.sort((a, b) => b.rate - a.rate)[0]
+  const highestRateDebt = [...debts].sort((a, b) => b.rate - a.rate)[0]
   const fireTarget     = settings.monthlyExpenses * 12 * 25
   const firePct        = fireTarget > 0 ? (nw / fireTarget) * 100 : 0
   const thisMonth      = new Date().toISOString().slice(0, 7)
@@ -30,15 +49,39 @@ function useActionCards(): ActionCard[] {
 
   const cards: ActionCard[] = []
 
-  // HIGH PRIORITY
-  if (emergencyMonths < 3) {
+  if (!snapshots.length) {
+    cards.push({
+      priority: 'high',
+      icon: '📸',
+      title: 'Add your first Net Worth snapshot',
+      body: 'Record your assets and liabilities today. This seeds your Lifetime Timeline and unlocks all projections.',
+      cta: 'Add snapshot →',
+      section: 'section-networth',
+      expand: 'networth',
+    })
+  }
+
+  if (!baseline?.assumptions.monthlyIncome) {
+    cards.push({
+      priority: 'high',
+      icon: '⚙️',
+      title: 'Set your income & expenses',
+      body: 'Your Baseline scenario needs your monthly income and expenses to calculate projections, savings rate, and FIRE date.',
+      cta: 'Open Scenario panel →',
+      section: 'section-scenarios',
+    })
+  }
+
+  if (emergencyMonths < 3 && snapshots.length) {
     const needed = monthlyExp * 3 - liquid
     cards.push({
       priority: 'high',
       icon: '🚨',
       title: 'Build your Emergency Fund',
-      body: `You have ${emergencyMonths.toFixed(1)} months covered. You need at least 3 months (${fmtINR(needed)} more) in savings before investing aggressively.`,
-      cta: 'Add to savings',
+      body: `You have ${emergencyMonths.toFixed(1)} months covered. Target is 3 months (${fmtINR(needed)} more in savings/checking).`,
+      cta: 'Update savings balance →',
+      section: 'section-networth',
+      expand: 'networth',
     })
   }
 
@@ -47,21 +90,23 @@ function useActionCards(): ActionCard[] {
       priority: 'high',
       icon: '💣',
       title: `Pay off ${highestRateDebt.name} first`,
-      body: `At ${highestRateDebt.rate}% APR, this is your most expensive debt. Paying ${fmtINR(2000)} extra/month saves ${fmtINR(Math.round(highestRateDebt.balance * highestRateDebt.rate / 100 * 0.3))} in interest.`,
-      cta: 'Use debt simulator',
+      body: `At ${highestRateDebt.rate}% APR this costs you the most. Use the Debt Simulator to see how extra payments help.`,
+      cta: 'Open Debt Simulator →',
+      section: 'section-debt',
+      expand: 'debt',
     })
   }
 
-  // QUICK WINS
-  if (sip > 0 && savingsRate > 15) {
+  if (sip > 0 && savingsRate > 15 && monthlyIncome > 0) {
     const extra = Math.round(monthlyIncome * 0.05)
-    const growth20yr = Math.round(extra * 12 * ((Math.pow(1.12, 20) - 1) / 0.12))
+    const growth = Math.round(extra * 12 * ((Math.pow(1.12, 20) - 1) / 0.12))
     cards.push({
       priority: 'quick',
       icon: '💡',
       title: `Increase SIP by ${fmtINR(extra)}/mo`,
-      body: `You're saving ${Math.round(savingsRate)}% — you can afford ${fmtINR(extra)} more in SIP. That becomes ${fmtINR(growth20yr)} in 20 years at 12% returns.`,
-      cta: 'Update in scenarios',
+      body: `You're saving ${Math.round(savingsRate)}% — you have room. That extra ${fmtINR(extra)}/mo becomes ${fmtINR(growth)} in 20 years.`,
+      cta: 'Simulate in Scenarios →',
+      section: 'section-scenarios',
     })
   }
 
@@ -71,31 +116,60 @@ function useActionCards(): ActionCard[] {
       priority: 'quick',
       icon: '🚀',
       title: 'Start your first SIP today',
-      body: `You can afford to invest ${fmtINR(suggested)}/month. Starting now vs 1 year later can make a difference of ${fmtINR(Math.round(suggested * 12 * ((Math.pow(1.12, 20) - 1) / 0.12) * 0.12))} over 20 years.`,
-      cta: 'See how in scenarios',
+      body: `You can invest ${fmtINR(suggested)}/month from your surplus. Set it in the Baseline scenario to see your FIRE date.`,
+      cta: 'Set SIP in Scenarios →',
+      section: 'section-scenarios',
     })
   }
 
-  // INSIGHTS
+  if (debts.length === 0 && snapshots.length) {
+    cards.push({
+      priority: 'quick',
+      icon: '🎯',
+      title: 'Add your life goals',
+      body: 'Add goals like home, education, or car. They appear as pins on your Lifetime Timeline and affect your projections.',
+      cta: 'Add goals →',
+      section: 'section-goals',
+      expand: 'goals',
+    })
+  }
+
+  if (transactions.length === 0) {
+    cards.push({
+      priority: 'quick',
+      icon: '🏦',
+      title: 'Import your bank statement',
+      body: 'Upload your bank CSV to auto-populate your income and expenses. HDFC, ICICI, SBI, Axis, Kotak all supported.',
+      cta: 'Open Import →',
+      section: 'section-import',
+      expand: 'import',
+    })
+  }
+
   if (cf.net > 0 && transactions.length > 0) {
     cards.push({
       priority: 'insight',
       icon: '🎉',
-      title: `Great month! Saved ${fmtINR(cf.net)}`,
-      body: `Your savings rate this month is ${monthlyIncome > 0 ? Math.round((cf.net / monthlyIncome) * 100) : Math.round((cf.net / cf.income) * 100)}%. ${cf.net > monthlyExp * 0.3 ? 'Consider putting extra into your SIP.' : 'Keep it up!'}`,
+      title: `Saved ${fmtINR(cf.net)} this month`,
+      body: `Savings rate: ${monthlyIncome > 0 ? Math.round((cf.net / monthlyIncome) * 100) : Math.round((cf.net / Math.max(cf.income, 1)) * 100)}%. ${cf.net > monthlyExp * 0.3 ? 'Consider putting extra into your SIP.' : 'Keep it up!'}`,
+      cta: 'View Cash Flow →',
+      section: 'section-cashflow',
+      expand: 'cashflow',
     })
   }
 
-  if (firePct > 0) {
+  if (firePct > 0 && firePct < 100) {
     cards.push({
       priority: 'insight',
       icon: '🔥',
-      title: `${firePct.toFixed(1)}% of the way to FIRE`,
+      title: `${firePct.toFixed(1)}% to FIRE`,
       body: firePct < 25
-        ? `You need ${fmtINR(fireTarget - nw)} more. At current pace, focus on increasing your SIP step-up rate.`
-        : firePct < 50
-        ? `Solid progress! The power of compounding kicks in more from here. Stay consistent.`
-        : `You're past the halfway mark. FIRE is within sight — keep your expenses in check.`,
+        ? 'Focus on increasing savings rate and SIP step-up to accelerate your FIRE journey.'
+        : firePct < 75
+        ? 'Solid progress! Compounding kicks in harder from here. Stay consistent.'
+        : 'Almost there — protect your portfolio from big drawdowns now.',
+      cta: 'View FIRE plan →',
+      section: 'section-fire',
     })
   }
 
@@ -103,14 +177,13 @@ function useActionCards(): ActionCard[] {
 }
 
 const PRIORITY_CONFIG = {
-  high:    { bg: 'bg-rose-50',    border: 'border-rose-200',   text: 'text-rose-600',   label: '🚨 High Priority' },
-  quick:   { bg: 'bg-indigo-50',  border: 'border-indigo-200', text: 'text-indigo-600', label: '💡 Quick Win' },
-  insight: { bg: 'bg-amber-50',   border: 'border-amber-200',  text: 'text-amber-700',  label: '📊 This Month' },
+  high:    { bg: 'bg-rose-50',   border: 'border-rose-200',   badge: 'bg-rose-100 text-rose-600',   label: '🚨 Needs Attention' },
+  quick:   { bg: 'bg-indigo-50', border: 'border-indigo-200', badge: 'bg-indigo-100 text-indigo-600', label: '💡 Quick Win'      },
+  insight: { bg: 'bg-amber-50',  border: 'border-amber-200',  badge: 'bg-amber-100 text-amber-700',  label: '📊 Insight'        },
 }
 
 export default function ActionCards() {
   const cards = useActionCards()
-
   if (!cards.length) return null
 
   return (
@@ -121,15 +194,19 @@ export default function ActionCards() {
           const cfg = PRIORITY_CONFIG[c.priority]
           return (
             <div key={i} className={`rounded-2xl border p-4 flex flex-col gap-2 ${cfg.bg} ${cfg.border}`}>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center justify-between">
+                <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full ${cfg.badge}`}>
+                  {cfg.label}
+                </span>
                 <span className="text-lg">{c.icon}</span>
-                <span className={`text-[10px] font-bold uppercase tracking-widest ${cfg.text}`}>{cfg.label}</span>
               </div>
               <p className="text-sm font-semibold text-surface-800">{c.title}</p>
               <p className="text-xs text-surface-600 leading-relaxed">{c.body}</p>
-              {c.cta && (
-                <p className={`text-xs font-semibold mt-1 ${cfg.text}`}>{c.cta} →</p>
-              )}
+              <button
+                onClick={() => scrollTo(c.section, c.expand)}
+                className="mt-1 text-xs font-semibold text-amber-600 hover:text-amber-700 text-left transition-colors underline-offset-2 hover:underline">
+                {c.cta}
+              </button>
             </div>
           )
         })}
