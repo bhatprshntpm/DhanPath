@@ -112,8 +112,8 @@ function MFCASTab() {
                 <button onClick={() => setFile(null)} className="ml-auto text-surface-300 hover:text-rose-400"><X size={14}/></button>
               </div>
           }
-          <input className="input-field font-mono uppercase tracking-widest" placeholder="Password (PAN, e.g. ABCDE1234F)"
-            value={pass} onChange={e => setPass(e.target.value.toUpperCase())} />
+          <input className="input-field font-mono" placeholder="Password (PAN or date of birth DDMMYYYY)"
+            value={pass} onChange={e => setPass(e.target.value)} />
           <StatusBanner status={step} message={result?.message ?? ''} />
           <button disabled={!file} onClick={parse} className="btn-primary flex items-center gap-2 justify-center disabled:opacity-40">
             <Upload size={14}/> Parse PDF
@@ -370,8 +370,8 @@ function DematPDFTab() {
                 <button onClick={() => setFile(null)} className="ml-auto text-surface-300 hover:text-rose-400"><X size={14}/></button>
               </div>
           }
-          <input className="input-field font-mono uppercase tracking-widest" placeholder="Password (PAN)"
-            value={pass} onChange={e => setPass(e.target.value.toUpperCase())} />
+          <input className="input-field font-mono" placeholder="Password (PAN or date of birth DDMMYYYY)"
+            value={pass} onChange={e => setPass(e.target.value)} />
           <StatusBanner status={step} message={result?.message ?? ''} />
           <button disabled={!file} onClick={parse} className="btn-primary flex items-center gap-2 justify-center disabled:opacity-40">
             <Upload size={14}/> Parse Demat CAS

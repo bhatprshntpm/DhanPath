@@ -77,10 +77,10 @@ function FileDropZone({
 
       {onPassword && state.file && !isDone && (
         <input
-          className="input-field text-sm font-mono uppercase tracking-widest mt-1"
-          placeholder="PDF password (usually your PAN)"
+          className="input-field text-sm font-mono mt-1"
+          placeholder="PDF password (PAN or date of birth DDMMYYYY)"
           value={password ?? ''} maxLength={20}
-          onChange={e => onPassword(e.target.value.toUpperCase())}
+          onChange={e => onPassword(e.target.value)}
           onClick={e => e.stopPropagation()}
         />
       )}
@@ -170,11 +170,12 @@ export default function OnboardingWizard({ forceOpen, onClose }: { forceOpen?: b
     }
   }
 
-  async function handleCAS(file: File | null) {
+  async function handleCAS(file: File | null, passwordOverride?: string) {
     if (!file) { setCasZone({ ...EMPTY_ZONE }); return }
     setCasZone(z => ({ ...z, file, status: 'parsing', summary: '' }))
     try {
-      const r = await parseCASPDF(file, casPass || undefined)
+      const pass = passwordOverride ?? casPass
+      const r = await parseCASPDF(file, pass || undefined)
       if (r.status === 'success') {
         setCasZone({ file, status: 'done', summary: `${r.funds.length} funds · Portfolio ${fmtINR(r.totalValue)} · ${r.format}`, data: r })
       } else if (r.status === 'password_required') {
@@ -362,7 +363,7 @@ export default function OnboardingWizard({ forceOpen, onClose }: { forceOpen?: b
                     state={casZone}
                     onFile={handleCAS}
                     password={casPass}
-                    onPassword={p => { setCasPass(p); if (casZone.file) handleCAS(casZone.file) }}
+                    onPassword={p => { setCasPass(p); if (casZone.file) handleCAS(casZone.file, p) }}
                   />
                   <FileDropZone
                     label="Equity Holdings"
