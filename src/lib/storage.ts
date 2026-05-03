@@ -72,7 +72,10 @@ export function loadData(): AppData {
 }
 
 export function saveData(data: AppData): void {
-  if (localStorage.getItem(DEMO_FLAG) === '1') return  // don't persist demo changes
+  // If in demo mode, any real write exits demo and saves as real data
+  if (localStorage.getItem(DEMO_FLAG) === '1') {
+    localStorage.removeItem(DEMO_FLAG)
+  }
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
 }
 

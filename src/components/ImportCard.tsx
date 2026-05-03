@@ -1,10 +1,10 @@
 import { useState, useRef } from 'react'
 import {
   Upload, FileText, AlertTriangle, CheckCircle,
-  Loader2, X, ChevronDown, ChevronUp, RefreshCw,
+  Loader2, X, ChevronDown, ChevronUp, RefreshCw, ChevronRight,
 } from 'lucide-react'
 import { useApp } from '../context/AppContext'
-import { fmt } from '../lib/calc'
+import { fmtINR } from '../lib/calc'
 
 import { parseCASPDF, casResultToHoldings, casResultToTransactions, casResultToSnapshot } from '../lib/casParser'
 import { parseBankCSV, bankTxnsToAppTransactions } from '../lib/bankCSVParser'
@@ -70,29 +70,40 @@ function FileDropZone({ onFile, accept, hint }: { onFile: (f: File) => void; acc
 // ─── Tab: MF CAS PDF ──────────────────────────────────────────────────────────
 function MFCASTab() {
   const { addHolding, addTransaction, addSnapshot } = useApp()
-  const [file, setFile]     = useState<File | null>(null)
-  const [pass, setPass]     = useState('')
-  const [step, setStep]     = useState<Step>('idle')
-  const [result, setResult] = useState<any>(null)
-  const [opts, setOpts]     = useState({ holdings: true, transactions: true, snapshot: true })
+  const [file, setFile]         = useState<File | null>(null)
+  const [pass, setPass]         = useState('')
+  const [step, setStep]         = useState<Step>('idle')
+  const [result, setResult]     = useState<any>(null)
+  const [showDebug, setShowDebug] = useState(false)
+  const [opts, setOpts]         = useState({ holdings: true, transactions: true, snapshot: true })
+  // Manual fallback fields
+  const [manualValue,    setManualValue]    = useState('')
+  const [manualInvested, setManualInvested] = useState('')
 
   async function parse() {
     if (!file) return
     setStep('parsing')
     const r = await parseCASPDF(file, pass || undefined)
     setResult(r)
-    setStep(r.status === 'success' ? 'preview' : 'error')
+    setStep(r.status === 'success' || r.status === 'no_data' ? 'preview' : 'error')
   }
 
   function doImport() {
     if (!result) return
-    if (opts.snapshot && result.totalValue > 0) addSnapshot(casResultToSnapshot(result))
-    if (opts.holdings)     casResultToHoldings(result).forEach((h: any) => addHolding(h))
-    if (opts.transactions) casResultToTransactions(result).forEach((t: any) => addTransaction(t))
+    // Use manual values if parser got 0
+    const effectiveValue    = result.totalValue    > 0 ? result.totalValue    : parseFloat(manualValue)    || 0
+    const effectiveInvested = result.totalInvested > 0 ? result.totalInvested : parseFloat(manualInvested) || 0
+    const effectiveResult   = { ...result, totalValue: effectiveValue, totalInvested: effectiveInvested }
+
+    if (opts.snapshot && effectiveValue > 0) addSnapshot(casResultToSnapshot(effectiveResult))
+    if (opts.holdings     && result.funds.length)        casResultToHoldings(effectiveResult).forEach((h: any) => addHolding(h))
+    if (opts.transactions && result.transactions.length) casResultToTransactions(effectiveResult).forEach((t: any) => addTransaction(t))
     setStep('done')
   }
 
-  function reset() { setStep('idle'); setResult(null); setFile(null); setPass('') }
+  function reset() { setStep('idle'); setResult(null); setFile(null); setPass(''); setManualValue(''); setManualInvested('') }
+
+  const parseGotNothing = result && result.totalValue === 0 && result.funds.length === 0
 
   return (
     <div className="flex flex-col gap-4">
@@ -100,7 +111,7 @@ function MFCASTab() {
         <p className="font-semibold">How to get your CAMS / KFintech CAS</p>
         <p>→ <a href="https://www.camsonline.com/Investors/Statements/Consolidated-Account-Statement" target="_blank" rel="noreferrer" className="underline">CAMS portal</a> — Login → Statements → CAS → Detailed</p>
         <p>→ <a href="https://mfs.kfintech.com/investor/General/ConsolidatedAccountStatement" target="_blank" rel="noreferrer" className="underline">KFintech portal</a> — Login → Statements → CAS</p>
-        <p className="text-amber-600 mt-1">Password is usually your PAN in UPPERCASE (e.g. ABCDE1234F)</p>
+        <p className="text-amber-600 mt-1">Password: usually your PAN (e.g. ABCDE1234F) or date of birth (DDMMYYYY)</p>
       </div>
 
       {step === 'idle' || step === 'error' ? (
@@ -121,37 +132,92 @@ function MFCASTab() {
         </div>
       ) : step === 'preview' && result ? (
         <div className="flex flex-col gap-4">
+          {/* KPI summary */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <KPI label="Portfolio Value"  value={fmt(result.totalValue)}    good={result.totalValue > 0} />
-            <KPI label="Total Invested"   value={fmt(result.totalInvested)} good={result.totalInvested > 0} />
-            <KPI label="Funds"            value={String(result.funds.length)}        good={result.funds.length > 0} />
-            <KPI label="Transactions"     value={String(result.transactions.length)} good={result.transactions.length > 0} />
+            <KPI label="Portfolio Value"  value={fmtINR(result.totalValue)}    good={result.totalValue > 0} />
+            <KPI label="Total Invested"   value={fmtINR(result.totalInvested)} good={result.totalInvested > 0} />
+            <KPI label="Funds"            value={String(result.funds.length)}         good={result.funds.length > 0} />
+            <KPI label="Transactions"     value={String(result.transactions.length)}  good={result.transactions.length > 0} />
           </div>
-          <div className="flex items-center gap-2 text-xs">
+
+          <div className="flex items-center gap-2 flex-wrap text-xs">
             <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 border border-indigo-100 font-medium">{result.format}</span>
             {result.pan && <span className="text-surface-300">PAN: {result.pan}</span>}
           </div>
+
+          {/* Fund list */}
           {result.funds.length > 0 && (
             <div className="max-h-40 overflow-y-auto flex flex-col gap-1">
+              <p className="text-[10px] uppercase tracking-widest font-semibold text-surface-300 mb-1">Funds detected</p>
               {result.funds.map((f: any, i: number) => (
                 <div key={i} className="flex justify-between text-xs py-1.5 border-b border-surface-50">
                   <span className="font-medium text-surface-800 truncate max-w-[65%]">{f.name}</span>
-                  <span className="text-surface-300">{fmt(f.currentValue)}</span>
+                  <span className="text-surface-300">{fmtINR(f.currentValue)}</span>
                 </div>
               ))}
             </div>
           )}
+
+          {/* Manual fallback when parser got nothing */}
+          {parseGotNothing && (
+            <div className="border border-amber-200 rounded-xl p-4 bg-amber-50 flex flex-col gap-3">
+              <p className="text-xs font-semibold text-amber-800">Parser could not read fund values automatically</p>
+              <p className="text-xs text-amber-700">
+                Open your CAS PDF and enter the total portfolio value manually below.
+                Your transaction history ({result.transactions.length} entries) will still be imported.
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] font-semibold text-surface-400 uppercase tracking-widest block mb-1">
+                    Current Portfolio Value (₹)
+                  </label>
+                  <input className="input-field" type="number" placeholder="e.g. 5340000"
+                    value={manualValue} onChange={e => setManualValue(e.target.value)} />
+                </div>
+                <div>
+                  <label className="text-[10px] font-semibold text-surface-400 uppercase tracking-widest block mb-1">
+                    Total Amount Invested (₹)
+                  </label>
+                  <input className="input-field" type="number" placeholder="e.g. 4200000"
+                    value={manualInvested} onChange={e => setManualInvested(e.target.value)} />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Debug panel */}
+          <div>
+            <button onClick={() => setShowDebug(v => !v)}
+              className="flex items-center gap-1 text-xs text-surface-400 hover:text-surface-700 transition-colors">
+              <ChevronRight size={12} className={showDebug ? 'rotate-90' : ''} />
+              What did the parser extract? (debug)
+            </button>
+            {showDebug && (
+              <div className="mt-2 p-3 bg-surface-900 rounded-xl text-[10px] font-mono text-surface-300 leading-relaxed overflow-x-auto">
+                <p className="text-amber-400 font-semibold mb-1">Parse log:</p>
+                {result.debugLog?.map((l: string, i: number) => <p key={i}>{l}</p>)}
+                <p className="text-amber-400 font-semibold mt-2 mb-1">First 30 lines extracted from PDF:</p>
+                <pre className="whitespace-pre-wrap text-surface-400">{result.rawTextSample}</pre>
+              </div>
+            )}
+          </div>
+
           <ImportOptions opts={opts} setOpts={setOpts} items={[
-            { key: 'snapshot',     label: 'Net Worth Snapshot', sub: fmt(result.totalValue),                  off: result.totalValue === 0 },
-            { key: 'holdings',     label: 'Fund Holdings',       sub: `${result.funds.length} funds`,          off: !result.funds.length },
-            { key: 'transactions', label: 'Transaction History', sub: `${result.transactions.length} entries`, off: !result.transactions.length },
+            { key: 'snapshot',     label: 'Net Worth Snapshot',  sub: fmtINR(parseFloat(manualValue) || result.totalValue),  off: result.totalValue === 0 && !manualValue },
+            { key: 'holdings',     label: 'Fund Holdings',        sub: `${result.funds.length} funds`,                       off: !result.funds.length },
+            { key: 'transactions', label: 'Transaction History',  sub: `${result.transactions.length} entries`,              off: !result.transactions.length },
           ]} />
+
           <div className="flex gap-2">
             <button onClick={reset} className="btn-ghost flex items-center gap-1 text-xs"><RefreshCw size={12}/> Reset</button>
-            <button onClick={doImport} className="btn-primary flex-1 flex items-center gap-2 justify-center">Import to FinanceOS</button>
+            <button onClick={doImport}
+              disabled={result.totalValue === 0 && !manualValue && !result.transactions.length}
+              className="btn-primary flex-1 flex items-center gap-2 justify-center disabled:opacity-40">
+              Import to FinanceOS
+            </button>
           </div>
         </div>
-      ) : <StatusBanner status={step} message="Data imported successfully. Check the Timeline and Portfolio sections." />}
+      ) : <StatusBanner status={step} message="Data imported. Check your Portfolio and Timeline." />}
     </div>
   )
 }
@@ -217,7 +283,7 @@ function BankCSVTab() {
             <KPI label="Bank Detected"    value={result.bank}                               good={result.bank !== 'Unknown'} />
             <KPI label="Transactions"     value={String(result.transactions.length)}         good={result.transactions.length > 0} />
             <KPI label="Date Range"       value={`${result.dateRange.from?.slice(0,7)} → ${result.dateRange.to?.slice(0,7)}`} good={!!result.dateRange.from} />
-            <KPI label="Closing Balance"  value={fmt(result.closingBalance)}                 good={result.closingBalance > 0} />
+            <KPI label="Closing Balance"  value={fmtINR(result.closingBalance)}                 good={result.closingBalance > 0} />
           </div>
           <div className="max-h-48 overflow-y-auto flex flex-col gap-1">
             {result.transactions.slice(0, 30).map((t: any, i: number) => (
@@ -225,7 +291,7 @@ function BankCSVTab() {
                 <span className="text-surface-300 shrink-0">{t.date}</span>
                 <span className="text-surface-800 font-medium truncate flex-1">{t.description.slice(0, 50)}</span>
                 <span className={t.credit > 0 ? 'text-emerald-600 font-medium shrink-0' : 'text-rose-500 shrink-0'}>
-                  {t.credit > 0 ? `+${fmt(t.credit)}` : `-${fmt(t.debit)}`}
+                  {t.credit > 0 ? `+${fmtINR(t.credit)}` : `-${fmtINR(t.debit)}`}
                 </span>
               </div>
             ))}
@@ -302,8 +368,8 @@ function EquityCSVTab() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <KPI label="Broker"          value={result.broker}                 good={result.broker !== 'Generic'} />
             <KPI label="Holdings"        value={String(result.holdings.length)} good={result.holdings.length > 0} />
-            <KPI label="Current Value"   value={fmt(result.totalValue)}         good={result.totalValue > 0} />
-            <KPI label="Total P&L"       value={fmt(result.totalPnL)}           good={result.totalPnL >= 0} />
+            <KPI label="Current Value"   value={fmtINR(result.totalValue)}         good={result.totalValue > 0} />
+            <KPI label="Total P&L"       value={fmtINR(result.totalPnL)}           good={result.totalPnL >= 0} />
           </div>
           {result.holdings.length > 0 && (
             <div className="max-h-48 overflow-y-auto flex flex-col gap-1">
@@ -312,8 +378,8 @@ function EquityCSVTab() {
                   <span className="font-medium text-surface-800">{h.symbol}</span>
                   <div className="flex gap-3">
                     <span className="text-surface-300">{h.quantity} units</span>
-                    <span className="text-surface-800">{fmt(h.currentValue)}</span>
-                    <span className={h.pnl >= 0 ? 'text-emerald-600' : 'text-rose-500'}>{h.pnl >= 0 ? '+' : ''}{fmt(h.pnl)}</span>
+                    <span className="text-surface-800">{fmtINR(h.currentValue)}</span>
+                    <span className={h.pnl >= 0 ? 'text-emerald-600' : 'text-rose-500'}>{h.pnl >= 0 ? '+' : ''}{fmtINR(h.pnl)}</span>
                   </div>
                 </div>
               ))}
@@ -382,14 +448,14 @@ function DematPDFTab() {
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
             <KPI label="Depository"  value={result.depository}               good={result.depository !== 'Unknown'} />
             <KPI label="Holdings"    value={String(result.holdings.length)}   good={result.holdings.length > 0} />
-            <KPI label="Total Value" value={fmt(result.totalValue)}           good={result.totalValue > 0} />
+            <KPI label="Total Value" value={fmtINR(result.totalValue)}           good={result.totalValue > 0} />
           </div>
           <div className="max-h-48 overflow-y-auto flex flex-col gap-1">
             {result.holdings.slice(0, 20).map((h: any, i: number) => (
               <div key={i} className="flex justify-between text-xs py-1.5 border-b border-surface-50">
                 <span className="font-medium text-surface-800">{h.symbol}</span>
-                <span className="text-surface-300">{h.quantity} × {fmt(h.marketValue / Math.max(h.quantity, 1))}</span>
-                <span className="text-surface-800">{fmt(h.marketValue)}</span>
+                <span className="text-surface-300">{h.quantity} × {fmtINR(h.marketValue / Math.max(h.quantity, 1))}</span>
+                <span className="text-surface-800">{fmtINR(h.marketValue)}</span>
               </div>
             ))}
           </div>
@@ -455,14 +521,14 @@ function EPFTab() {
       ) : step === 'preview' && result ? (
         <div className="flex flex-col gap-4">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <KPI label="EPF Balance"   value={fmt(result.totalBalance)}  good={result.totalBalance > 0} />
-            <KPI label="Employee Share" value={fmt(result.employeeBalance)} good={result.employeeBalance > 0} />
-            <KPI label="Employer Share" value={fmt(result.employerBalance)} good={result.employerBalance > 0} />
+            <KPI label="EPF Balance"   value={fmtINR(result.totalBalance)}  good={result.totalBalance > 0} />
+            <KPI label="Employee Share" value={fmtINR(result.employeeBalance)} good={result.employeeBalance > 0} />
+            <KPI label="Employer Share" value={fmtINR(result.employerBalance)} good={result.employerBalance > 0} />
             <KPI label="Months Found"  value={String(result.entries.length)} good={result.entries.length > 0} />
           </div>
           {result.memberName && <p className="text-xs text-surface-300">Member: <strong className="text-surface-800">{result.memberName}</strong> · UAN: {result.uan}</p>}
           <ImportOptions opts={opts} setOpts={setOpts} items={[
-            { key: 'snapshot',     label: 'Net Worth Snapshot (Retirement)',  sub: fmt(result.totalBalance),       off: result.totalBalance === 0 },
+            { key: 'snapshot',     label: 'Net Worth Snapshot (Retirement)',  sub: fmtINR(result.totalBalance),       off: result.totalBalance === 0 },
             { key: 'transactions', label: 'Monthly Contribution History',     sub: `${result.entries.length} months`, off: !result.entries.length },
           ]} />
           <div className="flex gap-2">
