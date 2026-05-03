@@ -173,7 +173,7 @@ function useActionCards(): ActionCard[] {
     })
   }
 
-  return cards.slice(0, 4)
+  return cards.filter(c => c.priority === 'high').slice(0, 2)
 }
 
 const PRIORITY_CONFIG = {
@@ -189,7 +189,7 @@ export default function ActionCards() {
   return (
     <div className="flex flex-col gap-3">
       <p className="section-title">Recommended Actions</p>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div className="flex flex-col gap-3">
         {cards.map((c, i) => {
           const cfg = PRIORITY_CONFIG[c.priority]
           return (

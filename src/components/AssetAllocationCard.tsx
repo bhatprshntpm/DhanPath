@@ -1,0 +1,192 @@
+import { useState } from 'react'
+import { ChevronDown, ChevronUp, Plus } from 'lucide-react'
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
+import { useApp } from '../context/AppContext'
+import { fmtINR, fmtPct } from '../lib/calc'
+import EmptyState from './EmptyState'
+
+const ASSET_COLORS: Record<string, string> = {
+  'Equity':     '#f59e0b',
+  'Mutual Funds':'#6366f1',
+  'Retirement': '#10b981',
+  'Real Estate':'#8b5cf6',
+  'Cash':       '#a8a29e',
+  'Fixed Income':'#3b82f6',
+  'Gold':       '#f97316',
+  'Crypto':     '#ec4899',
+  'Other':      '#d6d3d1',
+}
+
+interface AssetClass { name: string; value: number; color: string }
+
+export default function AssetAllocationCard() {
+  const { data, addHolding } = useApp()
+  const [expanded, setExpanded] = useState(false)
+  const [form, setForm] = useState({ name: '', ticker: '', type: 'etf' as const, value: '', costBasis: '' })
+
+  const latest = data.snapshots.length
+    ? [...data.snapshots].sort((a, b) => a.date.localeCompare(b.date)).at(-1)
+    : null
+
+  // Build asset class buckets
+  const buckets: Record<string, number> = {}
+
+  // From net worth snapshot
+  if (latest) {
+    const a = latest.assets
+    if (a.checking + a.savings > 0)     buckets['Cash']        = (buckets['Cash']        ?? 0) + a.checking + a.savings
+    if (a.brokerage > 0)                buckets['Equity']      = (buckets['Equity']      ?? 0) + a.brokerage
+    if (a.retirement > 0)               buckets['Retirement']  = (buckets['Retirement']  ?? 0) + a.retirement
+    if (a.realEstate > 0)               buckets['Real Estate'] = (buckets['Real Estate'] ?? 0) + a.realEstate
+    if (a.other > 0)                    buckets['Other']       = (buckets['Other']       ?? 0) + a.other
+  }
+
+  // From individual holdings (more specific, override buckets where possible)
+  const holdingBuckets: Record<string, number> = {}
+  for (const h of data.holdings) {
+    const cat =
+      h.type === 'stock'      ? 'Equity'       :
+      h.type === 'etf'        ? 'Mutual Funds'  :
+      h.type === 'bond'       ? 'Fixed Income'  :
+      h.type === 'retirement' ? 'Retirement'    :
+      h.type === 'crypto'     ? 'Crypto'        :
+      h.type === 'cash'       ? 'Cash'          : 'Other'
+    holdingBuckets[cat] = (holdingBuckets[cat] ?? 0) + h.value
+  }
+
+  // Use holdings if we have them, else net worth snapshot
+  const finalBuckets = Object.keys(holdingBuckets).length > 0
+    ? { ...buckets, ...holdingBuckets }  // holdings override snapshot categories
+    : buckets
+
+  const classes: AssetClass[] = Object.entries(finalBuckets)
+    .filter(([, v]) => v > 0)
+    .sort(([, a], [, b]) => b - a)
+    .map(([name, value]) => ({ name, value, color: ASSET_COLORS[name] ?? '#d6d3d1' }))
+
+  const total     = classes.reduce((a, c) => a + c.value, 0)
+  const totalCost = data.holdings.reduce((a, h) => a + h.costBasis, 0)
+  const gain      = total - totalCost
+  const gainPct   = totalCost > 0 ? (gain / totalCost) * 100 : 0
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!form.name || !form.value) return
+    addHolding({ ...form, value: parseFloat(form.value), costBasis: parseFloat(form.costBasis || form.value) })
+    setForm({ name: '', ticker: '', type: 'etf', value: '', costBasis: '' })
+  }
+
+  const hasData = classes.length > 0
+
+  return (
+    <div className="card p-5 flex flex-col gap-4">
+      <div className="flex items-center justify-between">
+        <p className="section-title">Asset Allocation</p>
+        <button data-expand="portfolio" className="btn-ghost" onClick={() => setExpanded(v => !v)}>
+          {expanded ? <ChevronUp size={16}/> : <ChevronDown size={16}/>}
+        </button>
+      </div>
+
+      {!hasData && !expanded ? (
+        <EmptyState
+          title="No holdings recorded"
+          description="Import your CAMS statement, Zerodha holdings, or EPF passbook to see your complete asset allocation."
+          cta="Connect your portfolio"
+          onCta={() => setExpanded(true)}
+        />
+      ) : (
+        <>
+          <div>
+            <p className="kpi-value">{fmtINR(total)}</p>
+            {totalCost > 0 && (
+              <p className={`text-xs font-medium mt-0.5 ${gain >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
+                {gain >= 0 ? '+' : ''}{fmtINR(gain)} ({fmtPct(gainPct)}) overall return
+              </p>
+            )}
+          </div>
+
+          {classes.length > 0 && (
+            <div className="flex gap-4 items-center">
+              <ResponsiveContainer width={100} height={100}>
+                <PieChart>
+                  <Pie data={classes} cx="50%" cy="50%" innerRadius={28} outerRadius={44}
+                    dataKey="value" paddingAngle={2}>
+                    {classes.map(c => <Cell key={c.name} fill={c.color} />)}
+                  </Pie>
+                  <Tooltip formatter={(v: any) => fmtINR(v as number)} />
+                </PieChart>
+              </ResponsiveContainer>
+
+              <div className="flex flex-col gap-1.5 flex-1 min-w-0">
+                {classes.map(c => (
+                  <div key={c.name} className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: c.color }} />
+                    <span className="text-xs text-surface-700 truncate flex-1">{c.name}</span>
+                    <span className="text-xs font-semibold text-surface-800 font-mono shrink-0">{fmtINR(c.value)}</span>
+                    <span className="text-[10px] text-surface-300 w-8 text-right shrink-0">
+                      {total > 0 ? `${((c.value / total) * 100).toFixed(0)}%` : '—'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {expanded && (
+        <div className="flex flex-col gap-4 pt-3 border-t border-surface-100 animate-fade-up">
+          <form onSubmit={submit} className="flex flex-col gap-2">
+            <p className="text-xs font-semibold text-surface-300 uppercase tracking-widest">Add Holding</p>
+            <div className="grid grid-cols-2 gap-2">
+              <input className="input-field" placeholder="Name (e.g. VTSAX)" value={form.name}
+                onChange={e => setForm(v => ({ ...v, name: e.target.value }))} />
+              <input className="input-field" placeholder="Ticker (optional)" value={form.ticker}
+                onChange={e => setForm(v => ({ ...v, ticker: e.target.value }))} />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <input className="input-field" type="number" placeholder="Current value (₹)" value={form.value}
+                onChange={e => setForm(v => ({ ...v, value: e.target.value }))} />
+              <input className="input-field" type="number" placeholder="Cost basis (₹)" value={form.costBasis}
+                onChange={e => setForm(v => ({ ...v, costBasis: e.target.value }))} />
+            </div>
+            <select className="input-field" value={form.type}
+              onChange={e => setForm(v => ({ ...v, type: e.target.value as any }))}>
+              {(['stock', 'etf', 'bond', 'retirement', 'crypto', 'cash'] as const).map(t => (
+                <option key={t} value={t}>{
+                  t === 'stock' ? 'Equity / Stock' :
+                  t === 'etf'   ? 'Mutual Fund / ETF' :
+                  t === 'bond'  ? 'Fixed Income / Bond / FD' :
+                  t === 'retirement' ? 'EPF / NPS / Retirement' :
+                  t === 'crypto'? 'Crypto' : 'Cash'
+                }</option>
+              ))}
+            </select>
+            <button type="submit" className="btn-primary flex items-center gap-1 justify-center">
+              <Plus size={14}/> Add
+            </button>
+          </form>
+
+          {data.holdings.length > 0 && (
+            <div className="max-h-48 overflow-y-auto flex flex-col gap-1">
+              {data.holdings.map(h => (
+                <div key={h.id} className="flex justify-between items-center text-xs py-1.5 border-b border-surface-50">
+                  <div>
+                    <span className="font-medium text-surface-800">{h.name}</span>
+                    {h.ticker && <span className="text-surface-300 ml-1 font-mono text-[10px]">{h.ticker}</span>}
+                  </div>
+                  <div className="text-right">
+                    <div className="font-medium text-surface-800">{fmtINR(h.value)}</div>
+                    <div className={`text-[10px] ${h.value >= h.costBasis ? 'text-emerald-600' : 'text-rose-500'}`}>
+                      {fmtPct(((h.value - h.costBasis) / Math.max(h.costBasis, 1)) * 100)}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}

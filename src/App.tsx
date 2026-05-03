@@ -1,15 +1,16 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { AppProvider } from './context/AppContext'
 import { useApp } from './context/AppContext'
 import Header from './components/Header'
 import OnboardingWizard from './components/OnboardingWizard'
+import DemoBanner from './components/DemoBanner'
 import KpiRow from './components/KpiRow'
 import HealthScoreCard from './components/HealthScoreCard'
 import ActionCards from './components/ActionCards'
 import LifetimeTimeline from './components/LifetimeTimeline'
 import NetWorthCard from './components/NetWorthCard'
 import CashFlowCard from './components/CashFlowCard'
-import PortfolioCard from './components/PortfolioCard'
+import AssetAllocationCard from './components/AssetAllocationCard'
 import DebtCard from './components/DebtCard'
 import GoalsCard from './components/GoalsCard'
 import SipCalculator from './components/SipCalculator'
@@ -18,18 +19,37 @@ import CrorepatiCalc from './components/CrorepatiCalc'
 import MonthlyReportCard from './components/MonthlyReportCard'
 import FireHorizon from './components/FireHorizon'
 import ScenarioPanel from './components/ScenarioPanel'
+import { DEMO_FLAG, ONBOARD_KEY, setDemoMode, isDemoMode } from './lib/demoData'
 
 function AppContent() {
   const [wizardOpen, setWizardOpen] = useState(false)
-  const { data } = useApp()
+  const [demoMode, setDemoMode_]    = useState(() => isDemoMode())
+  const { data }                    = useApp()
 
-  const hasAnyData     = data.snapshots.length > 0 || data.transactions.length > 0 || data.holdings.length > 0 || data.debts.length > 0
+  // Auto-load demo on very first visit
+  useEffect(() => {
+    const onboarded = localStorage.getItem(ONBOARD_KEY)
+    const demo      = localStorage.getItem(DEMO_FLAG)
+    if (!onboarded && !demo) {
+      setDemoMode()
+      setDemoMode_(true)
+      window.location.reload()   // reload so AppContext picks up demo data
+    }
+  }, [])
+
+  function handleUseMyData() {
+    setDemoMode_(false)
+    setWizardOpen(true)
+  }
+
+  const hasAnyData      = data.snapshots.length > 0 || data.transactions.length > 0 || data.holdings.length > 0 || data.debts.length > 0
   const hasPlanningData = data.snapshots.length > 0 || data.holdings.length > 0
 
   return (
     <div className="min-h-screen bg-surface-50">
-      <OnboardingWizard forceOpen={wizardOpen} onClose={() => setWizardOpen(false)} />
+      <OnboardingWizard forceOpen={wizardOpen} onClose={() => { setWizardOpen(false); setDemoMode_(false) }} />
       <Header onEditProfile={() => setWizardOpen(true)} />
+      {demoMode && <DemoBanner onUseMyData={handleUseMyData} />}
       <main className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 flex flex-col gap-4 sm:gap-8">
 
         <KpiRow />
@@ -46,10 +66,10 @@ function AppContent() {
 
         <section id="section-timeline"><LifetimeTimeline /></section>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-start">
           <section id="section-networth"><NetWorthCard /></section>
           <section id="section-cashflow"><CashFlowCard /></section>
-          <section id="section-portfolio"><PortfolioCard /></section>
+        <section id="section-portfolio"><AssetAllocationCard /></section>
           <section id="section-debt"><DebtCard /></section>
         </div>
 

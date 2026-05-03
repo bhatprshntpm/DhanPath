@@ -1,4 +1,5 @@
 import type { AppData, Settings } from '../types'
+import { DEMO_FLAG, DEMO_DATA } from './demoData'
 
 const STORAGE_KEY = 'finance-os-data'
 
@@ -51,6 +52,7 @@ export const DEFAULT_DATA: AppData = {
 }
 
 export function loadData(): AppData {
+  if (localStorage.getItem(DEMO_FLAG) === '1') return DEMO_DATA
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return DEFAULT_DATA
@@ -70,6 +72,7 @@ export function loadData(): AppData {
 }
 
 export function saveData(data: AppData): void {
+  if (localStorage.getItem(DEMO_FLAG) === '1') return  // don't persist demo changes
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
 }
 
