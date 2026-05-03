@@ -73,7 +73,7 @@ export function calcHealthScore(data: AppData): HealthScoreBreakdown {
     emergencyFund: { score: emergencyScore, max: 20, value: emergencyMonths,            label: `${emergencyMonths.toFixed(1)}x months covered` },
     debtRatio:     { score: debtScore,      max: 20, value: Math.round(dtiRatio),       label: debts.length === 0 ? 'No active debts 🎉' : `${Math.round(dtiRatio)}% debt-to-income` },
     investmentRate:{ score: investmentScore,max: 20, value: Math.round(investmentRate), label: `${Math.round(investmentRate)}% income invested` },
-    fireProgress:  { score: fireScore,      max: 15, value: Math.round(firePct),        label: `${Math.round(firePct)}% to FIRE number` },
+    fireProgress:  { score: fireScore,      max: 15, value: Math.round(firePct),        label: `${Math.round(firePct)}% to independence number` },
   }
 }
 

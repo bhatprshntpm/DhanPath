@@ -109,10 +109,10 @@ export function calcBadges(data: AppData): Badge[] {
     {
       id: 'fire_25',
       emoji: '🔥',
-      title: 'FIRE Starter',
+      title: 'Independence Starter',
       desc: '25% of the way to financial independence',
       unlocked: (() => { const t = data.settings.monthlyExpenses * 12 * 25; return t > 0 && nw / t >= 0.25 })(),
-      hint: 'Reach 25% of your FIRE number',
+      hint: 'Reach 25% of your independence number',
     },
     {
       id: 'fire_50',
@@ -120,7 +120,7 @@ export function calcBadges(data: AppData): Badge[] {
       title: 'Halfway There',
       desc: '50% of the way to FIRE',
       unlocked: (() => { const t = data.settings.monthlyExpenses * 12 * 25; return t > 0 && nw / t >= 0.5 })(),
-      hint: 'Reach 50% of your FIRE number',
+      hint: 'Reach 50% of your independence number',
     },
     {
       id: 'investor',

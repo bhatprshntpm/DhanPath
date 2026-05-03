@@ -26,7 +26,7 @@ export default function SipCalculator() {
     <div className={`card p-5 flex flex-col gap-3 border-l-4 ${isFunded ? 'border-l-emerald-400' : 'border-l-rose-400'}`}>
       <div className="flex items-center gap-2">
         <Calculator size={16} className={isFunded ? 'text-emerald-500' : 'text-rose-500'} />
-        <p className="section-title mb-0">Required SIP Calculator</p>
+        <p className="section-title mb-0">Required Required Investment</p>
       </div>
 
       <p className="text-xs text-surface-300">
@@ -53,7 +53,7 @@ export default function SipCalculator() {
       {!isFunded && (
         <p className="text-xs text-surface-300 flex items-center gap-1">
           <TrendingUp size={12} className="text-amber-500"/>
-          Increase <em>Extra Savings/mo</em> in the Baseline scenario to {fmt(requiredSIP)}/mo to close the gap
+          Increase <em>Additional Monthly Investment</em> in the Baseline scenario to {fmt(requiredSIP)}/mo to close the gap
         </p>
       )}
     </div>

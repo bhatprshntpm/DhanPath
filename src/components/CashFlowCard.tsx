@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { Plus, ChevronDown, ChevronUp } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, Cell } from 'recharts'
 import { useApp } from '../context/AppContext'
-import { monthlyCashFlow, fmt } from '../lib/calc'
+import { monthlyCashFlow, fmtINR } from '../lib/calc'
+import EmptyState from './EmptyState'
 
 const EXPENSE_CATEGORIES = ['Housing','Food','Transport','Healthcare','Entertainment','Savings','Subscriptions','Other']
 const INCOME_CATEGORIES  = ['Salary','Bonus','Freelance','Dividends','Other']
@@ -45,22 +46,34 @@ export default function CashFlowCard() {
         </button>
       </div>
 
-      <div className="flex justify-between text-sm">
-        <span className="text-emerald-600 font-semibold">{fmt(income)} <span className="text-surface-300 font-normal text-xs">in</span></span>
-        <span className="text-rose-500 font-semibold">{fmt(expenses)} <span className="text-surface-300 font-normal text-xs">out</span></span>
+      {data.transactions.length === 0 && !expanded ? (
+        <EmptyState
+          title="No transaction history"
+          description="Upload your bank statement to automatically populate your income and expenditure — no manual entry required."
+          cta="Upload bank statement"
+          onCta={() => setExpanded(true)}
+          footnote="Supports HDFC · ICICI · SBI · Axis · Kotak"
+        />
+      ) : (
+        <>
+        <div className="flex justify-between text-sm">
+        <span className="text-emerald-600 font-semibold">{fmtINR(income)} <span className="text-surface-300 font-normal text-xs">in</span></span>
+        <span className="text-rose-500 font-semibold">{fmtINR(expenses)} <span className="text-surface-300 font-normal text-xs">out</span></span>
         <span className={`font-semibold ${net >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
-          {fmt(net)} <span className="text-surface-300 font-normal text-xs">net</span>
+          {fmtINR(net)} <span className="text-surface-300 font-normal text-xs">net</span>
         </span>
       </div>
 
       <ResponsiveContainer width="100%" height={100}>
         <BarChart data={last6} barSize={10}>
           <XAxis dataKey="month" tick={{ fontSize: 10, fill: '#a8a29e' }} tickLine={false} axisLine={false}/>
-          <Tooltip formatter={(v: any) => fmt(v as number)} />
+          <Tooltip formatter={(v: any) => fmtINR(v as number)} />
           <Bar dataKey="income"   fill="#10b981" radius={[4,4,0,0]} />
           <Bar dataKey="expenses" fill="#f43f5e" radius={[4,4,0,0]} />
         </BarChart>
       </ResponsiveContainer>
+        </>
+      )} {/* end conditional */}
 
       {expanded && (
         <div className="flex flex-col gap-4 pt-2 border-t border-surface-100 animate-fade-up">
@@ -69,7 +82,7 @@ export default function CashFlowCard() {
               <BarChart data={catData} layout="vertical" barSize={8}>
                 <XAxis type="number" hide />
                 <YAxis dataKey="name" type="category" tick={{ fontSize: 10, fill: '#a8a29e' }} tickLine={false} axisLine={false} width={80}/>
-                <Tooltip formatter={(v: any) => fmt(v as number)} />
+                <Tooltip formatter={(v: any) => fmtINR(v as number)} />
                 <Bar dataKey="value" radius={[0,4,4,0]}>
                   {catData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                 </Bar>
@@ -107,7 +120,7 @@ export default function CashFlowCard() {
                     {t.note && <span className="text-surface-300 ml-1">· {t.note}</span>}
                   </div>
                   <span className={t.type === 'income' ? 'text-emerald-600 font-medium' : 'text-rose-500 font-medium'}>
-                    {t.type === 'income' ? '+' : '-'}{fmt(t.amount)}
+                    {t.type === 'income' ? '+' : '-'}{fmtINR(t.amount)}
                   </span>
                 </div>
               ))}

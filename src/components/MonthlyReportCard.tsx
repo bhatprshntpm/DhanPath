@@ -57,7 +57,7 @@ export default function MonthlyReportCard() {
     <div className="card p-5 flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <div>
-          <p className="section-title">Monthly Report Card</p>
+          <p className="section-title">Monthly Summary</p>
           <p className="text-xs text-surface-300">{monthName}</p>
         </div>
         <div className="text-center">

@@ -520,8 +520,8 @@ export default function ImportCard() {
     <div className="card p-5 flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <div>
-          <p className="section-title">Import Financial Data</p>
-          <p className="text-xs text-surface-300">MF CAS · Bank CSV · Equity · Demat · EPF — all processed locally</p>
+          <p className="section-title">Connect Data Sources</p>
+          <p className="text-xs text-surface-300">Mutual Funds · Bank · Equity · Demat · EPF — all processed locally</p>
         </div>
         <button data-expand="import" className="btn-ghost" onClick={() => setExpanded(v => !v)}>
           {expanded ? <ChevronUp size={16}/> : <ChevronDown size={16}/>}

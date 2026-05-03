@@ -1,139 +1,257 @@
-import { useState, useEffect } from 'react'
-import { ChevronRight, ChevronLeft, X, Plus, Trash2 } from 'lucide-react'
+import { useState, useRef } from 'react'
+import { ChevronRight, ChevronLeft, X, Upload, CheckCircle, Loader2 } from 'lucide-react'
 import { useApp } from '../context/AppContext'
 import { calcHealthScore, HEALTH_LABELS } from '../lib/healthScore'
 import { fmtINR } from '../lib/calc'
+import { parseCASPDF, casResultToHoldings, casResultToTransactions, casResultToSnapshot } from '../lib/casParser'
+import { parseBankCSV, bankTxnsToAppTransactions } from '../lib/bankCSVParser'
+import { parseEquityCSV, equityHoldingsToAppHoldings, equityTradesToAppTransactions } from '../lib/equityCSVParser'
+import { parseEPFPDF, epfToSnapshot, epfToTransactions } from '../lib/epfParser'
 
 const ONBOARDING_KEY = 'dhanpath-onboarded'
 
-const LIFE_STAGES = [
-  { emoji: '🎓', label: 'Fresh Graduate',  age: 22, income: 40000,  expenses: 25000, sip: 3000  },
-  { emoji: '💼', label: 'Young Professional', age: 28, income: 80000,  expenses: 45000, sip: 10000 },
-  { emoji: '👨‍👩‍👧', label: 'New Family',      age: 33, income: 120000, expenses: 75000, sip: 15000 },
-  { emoji: '🏠', label: 'Mid-Career',       age: 40, income: 180000, expenses: 100000, sip: 25000 },
-  { emoji: '🌅', label: 'Pre-Retirement',   age: 52, income: 250000, expenses: 120000, sip: 50000 },
+const GOALS = [
+  { id: 'fi',       label: 'Financial Independence',  sub: 'Build a corpus that funds your lifestyle forever' },
+  { id: 'debt',     label: 'Debt Freedom',             sub: 'Clear all loans and live without financial burden' },
+  { id: 'wealth',   label: 'Wealth Creation',          sub: 'Systematically grow your net worth over time' },
+  { id: 'retire',   label: 'Retirement Planning',      sub: 'Ensure you never outlive your savings' },
+  { id: 'track',    label: 'Track & Understand',       sub: 'Get clarity on where your money goes' },
 ]
 
-interface LoanEntry { type: string; principal: number; rate: number; tenureYears: number; emisPaid: number; emiAmount: number }
-const EMPTY_LOAN: LoanEntry = { type: 'Home Loan', principal: 0, rate: 8.5, tenureYears: 20, emisPaid: 0, emiAmount: 0 }
-const LOAN_TYPES = ['Home Loan', 'Car Loan', 'Personal Loan', 'Education Loan', 'Other']
+type ParseStatus = 'idle' | 'parsing' | 'done' | 'error'
 
-function loanBalance(l: LoanEntry): number {
-  if (!l.principal || !l.rate || !l.tenureYears) return l.principal
-  const r       = l.rate / 100 / 12
-  const n       = l.tenureYears * 12
-  const paid    = l.emisPaid
-  const balance = l.principal * Math.pow(1 + r, paid) - (l.emiAmount || (l.principal * r * Math.pow(1 + r, n) / (Math.pow(1 + r, n) - 1))) * ((Math.pow(1 + r, paid) - 1) / r)
-  return Math.max(Math.round(balance), 0)
+interface FileZoneState {
+  file:    File | null
+  status:  ParseStatus
+  summary: string
+  data:    any
 }
 
-function ScoreReveal({ score, onDone }: { score: ReturnType<typeof calcHealthScore>; onDone: () => void }) {
-  const [displayed, setDisplayed] = useState(0)
-  const label = HEALTH_LABELS[score.grade]
+const EMPTY_ZONE: FileZoneState = { file: null, status: 'idle', summary: '', data: null }
 
-  useEffect(() => {
-    const step = score.total / 60
-    let cur = 0
-    const t = setInterval(() => {
-      cur = Math.min(cur + step, score.total)
-      setDisplayed(Math.round(cur))
-      if (cur >= score.total) clearInterval(t)
-    }, 16)
-    return () => clearInterval(t)
-  }, [score.total])
-
-  const r = 54, circ = 2 * Math.PI * r
-  const dash = (displayed / 100) * circ
+function FileDropZone({
+  label, hint, accept, state, onFile, password, onPassword,
+}: {
+  label: string; hint: string; accept: string
+  state: FileZoneState
+  onFile: (f: File) => void
+  password?: string
+  onPassword?: (p: string) => void
+}) {
+  const ref = useRef<HTMLInputElement>(null)
+  const isDone  = state.status === 'done'
+  const isParsing = state.status === 'parsing'
 
   return (
-    <div className="flex flex-col items-center gap-6 py-4">
-      <p className="text-lg font-semibold text-surface-800">Your Financial Health Score</p>
+    <div
+      className={`relative flex flex-col gap-2 p-4 rounded-2xl border-2 transition-all cursor-pointer
+        ${isDone ? 'border-emerald-300 bg-emerald-50' : 'border-dashed border-surface-200 hover:border-amber-300 hover:bg-amber-50/30 bg-white'}`}
+      onClick={() => !isDone && ref.current?.click()}
+      onDragOver={e => e.preventDefault()}
+      onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) onFile(f) }}
+    >
+      <input ref={ref} type="file" accept={accept} className="hidden"
+        onChange={e => { const f = e.target.files?.[0]; if (f) onFile(f) }} />
+
+      <div className="flex items-start gap-3">
+        <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5
+          ${isDone ? 'bg-emerald-100' : 'bg-surface-100'}`}>
+          {isParsing ? <Loader2 size={16} className="animate-spin text-amber-500" />
+            : isDone ? <CheckCircle size={16} className="text-emerald-600" />
+            : <Upload size={16} className="text-surface-400" />}
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className={`text-sm font-semibold ${isDone ? 'text-emerald-700' : 'text-surface-800'}`}>{label}</p>
+          <p className="text-xs text-surface-400 mt-0.5 leading-relaxed">{isDone ? state.summary : hint}</p>
+          {state.file && !isDone && (
+            <p className="text-xs text-amber-600 mt-1 truncate">{state.file.name}</p>
+          )}
+        </div>
+        {isDone && (
+          <button onClick={e => { e.stopPropagation(); onFile(null as any) }}
+            className="text-surface-300 hover:text-rose-400 shrink-0">
+            <X size={14}/>
+          </button>
+        )}
+      </div>
+
+      {onPassword && state.file && !isDone && (
+        <input
+          className="input-field text-sm font-mono uppercase tracking-widest mt-1"
+          placeholder="PDF password (usually your PAN)"
+          value={password ?? ''} maxLength={20}
+          onChange={e => onPassword(e.target.value.toUpperCase())}
+          onClick={e => e.stopPropagation()}
+        />
+      )}
+    </div>
+  )
+}
+
+function ScoreReveal({ onDone }: { onDone: () => void }) {
+  const { data } = useApp()
+  const score = calcHealthScore(data)
+  const label = HEALTH_LABELS[score.grade]
+  const hasData = data.snapshots.length > 0 || data.transactions.length > 0
+
+  const r = 54, circ = 2 * Math.PI * r
+  const dash = hasData ? (score.total / 100) * circ : 0
+
+  return (
+    <div className="flex flex-col items-center gap-5 py-2">
+      <p className="text-base font-semibold text-surface-800 text-center">
+        {hasData ? 'Your Financial Health Index' : 'Dashboard ready — add data to see your score'}
+      </p>
 
       <div className="relative">
         <svg width={140} height={140} className="-rotate-90">
           <circle cx={70} cy={70} r={r} fill="none" stroke="#f5f5f4" strokeWidth={14} />
-          <circle cx={70} cy={70} r={r} fill="none" stroke={score.color} strokeWidth={14}
-            strokeDasharray={`${dash} ${circ}`} strokeLinecap="round"
-            style={{ transition: 'stroke-dasharray 0.05s linear' }} />
+          <circle cx={70} cy={70} r={r} fill="none" stroke={hasData ? score.color : '#e7e5e4'}
+            strokeWidth={14} strokeDasharray={`${dash} ${circ}`} strokeLinecap="round"
+            style={{ transition: 'stroke-dasharray 1.2s ease-out' }} />
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-4xl font-bold" style={{ color: score.color }}>{displayed}</span>
-          <span className="text-xs text-surface-300">/ 100</span>
+          {hasData
+            ? <><span className="text-4xl font-bold" style={{ color: score.color }}>{score.total}</span>
+                <span className="text-xs text-surface-300">/ 100</span></>
+            : <span className="text-2xl font-bold text-surface-300">—</span>}
         </div>
       </div>
 
-      <div className="text-center">
-        <div className="flex items-center justify-center gap-2 mb-1">
-          <span className="text-2xl font-bold" style={{ color: score.color }}>{score.grade}</span>
+      {hasData && (
+        <div className="text-center">
+          <p className="text-xl font-bold" style={{ color: score.color }}>{score.grade} — {label.text}</p>
+          <p className="text-sm text-surface-400 mt-1">{label.sub}</p>
         </div>
-        <p className="font-semibold text-surface-800">{label.text}</p>
-        <p className="text-sm text-surface-300 mt-1">{label.sub}</p>
+      )}
+
+      <div className="w-full bg-surface-50 rounded-2xl p-4 text-xs text-surface-500 text-center border border-surface-100">
+        All data is stored locally on your device. Nothing is sent to any server.
       </div>
 
-      <div className="w-full flex flex-col gap-2 px-2">
-        {[
-          { label: 'Savings Rate',    score: score.savingsRate.score,    max: 25, color: '#10b981' },
-          { label: 'Emergency Fund',  score: score.emergencyFund.score,  max: 20, color: '#6366f1' },
-          { label: 'Debt Ratio',      score: score.debtRatio.score,      max: 20, color: '#f59e0b' },
-          { label: 'Investment Rate', score: score.investmentRate.score, max: 20, color: '#8b5cf6' },
-          { label: 'FIRE Progress',   score: score.fireProgress.score,   max: 15, color: '#ef4444' },
-        ].map(b => (
-          <div key={b.label} className="flex items-center gap-3">
-            <span className="text-xs text-surface-300 w-28 shrink-0">{b.label}</span>
-            <div className="flex-1 bg-surface-100 rounded-full h-2">
-              <div className="h-2 rounded-full transition-all duration-700"
-                style={{ width: `${(b.score / b.max) * 100}%`, backgroundColor: b.color }} />
-            </div>
-            <span className="text-xs font-mono text-surface-300 w-8 text-right">{b.score}/{b.max}</span>
-          </div>
-        ))}
-      </div>
-
-      <button onClick={onDone} className="btn-primary w-full flex items-center justify-center gap-2 mt-2">
-        View My Dashboard <ChevronRight size={16} />
+      <button onClick={onDone} className="btn-primary w-full flex items-center justify-center gap-2">
+        Open my dashboard <ChevronRight size={16} />
       </button>
     </div>
   )
 }
 
 export default function OnboardingWizard({ forceOpen, onClose }: { forceOpen?: boolean; onClose?: () => void } = {}) {
-  const { data, updateSettings, updateScenario, addDebt } = useApp()
-  const [open, setOpen]           = useState(() => !localStorage.getItem(ONBOARDING_KEY))
-  const [step, setStep]           = useState(0)
+  const { data, updateSettings, updateScenario, addHolding, addTransaction, addSnapshot } = useApp()
+  const [open, setOpen]         = useState(() => !localStorage.getItem(ONBOARDING_KEY))
+  const [step, setStep]         = useState(0)
   const [showScore, setShowScore] = useState(false)
-  const isOpen = forceOpen ?? open
 
   const [name, setName]         = useState('')
   const [age, setAge]           = useState(28)
-  const [income, setIncome]     = useState(100000)
-  const [expenses, setExpenses] = useState(60000)
-  const [sip, setSip]           = useState(10000)
-  const [loans, setLoans]       = useState<LoanEntry[]>([])
-  const [fireTarget, setFireTarget] = useState(0)
-  const [fireMode, setFireMode] = useState<'auto' | 'manual'>('auto')
+  const [goal, setGoal]         = useState('')
 
-  const suggestedFire = Math.round((expenses * 12 * 25) / 1e7) * 1e7
+  const [bankZone, setBankZone]   = useState<FileZoneState>({ ...EMPTY_ZONE })
+  const [casZone,  setCasZone]    = useState<FileZoneState>({ ...EMPTY_ZONE })
+  const [casPass,  setCasPass]    = useState('')
+  const [kiteZone, setKiteZone]   = useState<FileZoneState>({ ...EMPTY_ZONE })
+  const [epfZone,  setEpfZone]    = useState<FileZoneState>({ ...EMPTY_ZONE })
 
-  function applyLifeStage(ls: typeof LIFE_STAGES[0]) {
-    setAge(ls.age); setIncome(ls.income); setExpenses(ls.expenses); setSip(ls.sip)
-  }
+  const isOpen = forceOpen ?? open
 
-  function addLoan() { setLoans(l => [...l, { ...EMPTY_LOAN }]) }
-  function removeLoan(i: number) { setLoans(l => l.filter((_, j) => j !== i)) }
-  function updateLoan(i: number, patch: Partial<LoanEntry>) {
-    setLoans(l => l.map((x, j) => j === i ? { ...x, ...patch } : x))
-  }
-
-  function finish() {
-    updateSettings({ name: name || 'My Finances', currentAge: age, monthlyExpenses: expenses, currency: 'INR' })
-    const baseline = data.scenarios.find(s => s.id === 'baseline')
-    if (baseline) {
-      updateScenario({ ...baseline, assumptions: { ...baseline.assumptions, monthlyIncome: income, monthlyExpenses: expenses, extraMonthlySavings: sip } })
+  async function handleBank(file: File | null) {
+    if (!file) { setBankZone({ ...EMPTY_ZONE }); return }
+    setBankZone(z => ({ ...z, file, status: 'parsing', summary: '' }))
+    try {
+      const text = await file.text()
+      const r    = parseBankCSV(text)
+      if (r.status === 'success') {
+        setBankZone({ file, status: 'done', summary: `${r.transactions.length} transactions · ${r.bank} · ${r.dateRange.from?.slice(0,7)} to ${r.dateRange.to?.slice(0,7)}`, data: r })
+      } else {
+        setBankZone({ file, status: 'error', summary: r.message, data: null })
+      }
+    } catch (e: any) {
+      setBankZone({ file, status: 'error', summary: String(e?.message), data: null })
     }
-    loans.forEach(l => {
-      addDebt({ name: l.type, balance: loanBalance(l), rate: l.rate, minPayment: l.emiAmount, color: '#ef4444' })
-    })
-    setShowScore(true)
+  }
+
+  async function handleCAS(file: File | null) {
+    if (!file) { setCasZone({ ...EMPTY_ZONE }); return }
+    setCasZone(z => ({ ...z, file, status: 'parsing', summary: '' }))
+    try {
+      const r = await parseCASPDF(file, casPass || undefined)
+      if (r.status === 'success') {
+        setCasZone({ file, status: 'done', summary: `${r.funds.length} funds · Portfolio ${fmtINR(r.totalValue)} · ${r.format}`, data: r })
+      } else if (r.status === 'password_required') {
+        setCasZone(z => ({ ...z, status: 'idle', summary: r.message, data: null }))
+      } else {
+        setCasZone({ file, status: 'error', summary: r.message, data: null })
+      }
+    } catch (e: any) {
+      setCasZone({ file, status: 'error', summary: String(e?.message), data: null })
+    }
+  }
+
+  async function handleKite(file: File | null) {
+    if (!file) { setKiteZone({ ...EMPTY_ZONE }); return }
+    setKiteZone(z => ({ ...z, file, status: 'parsing', summary: '' }))
+    try {
+      const text = await file.text()
+      const r    = parseEquityCSV(text)
+      if (r.status === 'success') {
+        setKiteZone({ file, status: 'done', summary: `${r.holdings.length} holdings · ${fmtINR(r.totalValue)} · ${r.broker}`, data: r })
+      } else {
+        setKiteZone({ file, status: 'error', summary: r.message, data: null })
+      }
+    } catch (e: any) {
+      setKiteZone({ file, status: 'error', summary: String(e?.message), data: null })
+    }
+  }
+
+  async function handleEPF(file: File | null) {
+    if (!file) { setEpfZone({ ...EMPTY_ZONE }); return }
+    setEpfZone(z => ({ ...z, file, status: 'parsing', summary: '' }))
+    try {
+      const r = await parseEPFPDF(file)
+      if (r.status === 'success') {
+        setEpfZone({ file, status: 'done', summary: `EPF balance ${fmtINR(r.totalBalance)} · ${r.entries.length} months`, data: r })
+      } else {
+        setEpfZone({ file, status: 'error', summary: r.message, data: null })
+      }
+    } catch (e: any) {
+      setEpfZone({ file, status: 'error', summary: String(e?.message), data: null })
+    }
+  }
+
+  const anyImported = [bankZone, casZone, kiteZone, epfZone].some(z => z.status === 'done')
+  const anyParsing  = [bankZone, casZone, kiteZone, epfZone].some(z => z.status === 'parsing')
+
+  function applyImports() {
+    updateSettings({ name: name || 'My Finances', currentAge: age, currency: 'INR' })
+
+    const baseline = data.scenarios.find(s => s.id === 'baseline')
+    if (baseline && bankZone.data?.transactions?.length) {
+      const txns = bankZone.data.transactions
+      const credits = txns.filter((t: any) => t.credit > 0)
+      const debits  = txns.filter((t: any) => t.debit  > 0)
+      const avgIncome  = credits.length ? credits.reduce((a: number, t: any) => a + t.credit, 0) / credits.length : 0
+      const avgExpenses = debits.length ? debits.reduce((a: number, t: any) => a + t.debit, 0) / debits.length : 0
+      if (avgIncome > 0) {
+        updateScenario({ ...baseline, assumptions: { ...baseline.assumptions, monthlyIncome: Math.round(avgIncome), monthlyExpenses: Math.round(avgExpenses) } })
+      }
+    }
+
+    if (bankZone.data?.status === 'success') {
+      bankTxnsToAppTransactions(bankZone.data.transactions).forEach((t: any) => addTransaction(t))
+    }
+    if (casZone.data?.status === 'success') {
+      casResultToHoldings(casZone.data).forEach((h: any) => addHolding(h))
+      casResultToTransactions(casZone.data).forEach((t: any) => addTransaction(t))
+      addSnapshot(casResultToSnapshot(casZone.data))
+    }
+    if (kiteZone.data?.status === 'success') {
+      equityHoldingsToAppHoldings(kiteZone.data.holdings).forEach((h: any) => addHolding(h))
+      equityTradesToAppTransactions(kiteZone.data.transactions).forEach((t: any) => addTransaction(t))
+    }
+    if (epfZone.data?.status === 'success') {
+      addSnapshot(epfToSnapshot(epfZone.data))
+      epfToTransactions(epfZone.data).forEach((t: any) => addTransaction(t))
+    }
   }
 
   function done() {
@@ -142,74 +260,83 @@ export default function OnboardingWizard({ forceOpen, onClose }: { forceOpen?: b
     onClose?.()
   }
 
+  function goToStep3() {
+    applyImports()
+    setShowScore(true)
+  }
+
   if (!isOpen) return null
 
   const steps = [
-    { title: "Welcome to DhanPath", sub: "Set up your financial profile" },
-    { title: "Your Income",  sub: "What do you earn every month?" },
-    { title: "Your Expenses", sub: "What do you spend every month?" },
-    { title: "Your Investments", sub: "Are you investing regularly?" },
-    { title: "Your Loans",   sub: "Any active loans or EMIs?" },
-    { title: "Your Goal",    sub: "What's your financial independence target?" },
+    { title: 'Tell us about yourself', sub: 'A few details to personalise your plan' },
+    { title: 'Connect your data',      sub: 'Upload files to auto-populate your dashboard — no manual entry needed' },
+    { title: 'Your financial picture', sub: '' },
   ]
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
-        <div className="p-6">
-          {/* Header */}
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[92vh] overflow-y-auto">
+        <div className="p-6 sm:p-8">
+
+          {/* Progress + close */}
           {!showScore && (
             <div className="flex items-center justify-between mb-6">
-              <div className="flex gap-1.5">
+              <div className="flex gap-2">
                 {steps.map((_, i) => (
-                  <div key={i} className={`h-1.5 rounded-full transition-all duration-300 ${i === step ? 'w-6 bg-amber-500' : i < step ? 'w-3 bg-amber-300' : 'w-3 bg-surface-200'}`} />
+                  <div key={i} className={`h-1 rounded-full transition-all duration-300
+                    ${i === step ? 'w-8 bg-amber-500' : i < step ? 'w-4 bg-amber-300' : 'w-4 bg-surface-200'}`} />
                 ))}
               </div>
-              <button onClick={done} className="text-surface-300 hover:text-surface-800 transition-colors">
-                <X size={18} />
+              <button onClick={done} className="text-surface-300 hover:text-surface-600 transition-colors">
+                <X size={18}/>
               </button>
             </div>
           )}
 
           {showScore ? (
-            <ScoreReveal score={calcHealthScore(data)} onDone={done} />
+            <ScoreReveal onDone={done} />
           ) : (
             <div className="flex flex-col gap-6">
               <div>
-                <div className="flex items-center justify-center gap-2 mb-4">
-                  <img src="/DhanPath/logo.png" alt="DhanPath" className="h-12 w-auto mix-blend-multiply" />
-                  <div className="flex flex-col leading-tight">
-                    <span className="text-lg font-bold text-[#2d5a27]">DhanPath</span>
-                    <span className="text-[10px] text-[#5a8a4a] font-medium">Navigate, Plan, Prosper</span>
-                  </div>
-                </div>
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-surface-300 mb-1">
+                  Step {step + 1} of {steps.length}
+                </p>
                 <h2 className="text-xl font-bold text-surface-800">{steps[step].title}</h2>
-                <p className="text-sm text-surface-300 mt-1">{steps[step].sub}</p>
+                {steps[step].sub && <p className="text-sm text-surface-400 mt-1">{steps[step].sub}</p>}
               </div>
 
-              {/* Step 0: Name + Age + Life Stage */}
+              {/* Step 0 — Name, Age, Goal */}
               {step === 0 && (
-                <div className="flex flex-col gap-4">
-                  <div>
-                    <label className="text-xs font-semibold text-surface-300 uppercase tracking-widest">Your name</label>
-                    <input className="input-field mt-1" placeholder="e.g. Prashant" value={name} onChange={e => setName(e.target.value)} />
+                <div className="flex flex-col gap-5">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-xs font-semibold text-surface-400 uppercase tracking-widest block mb-1.5">Name</label>
+                      <input className="input-field" placeholder="e.g. Prashant"
+                        value={name} onChange={e => setName(e.target.value)} />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-surface-400 uppercase tracking-widest block mb-1.5">Age</label>
+                      <input className="input-field" type="number" min={18} max={80}
+                        value={age} onChange={e => setAge(parseInt(e.target.value) || 28)} />
+                    </div>
                   </div>
+
                   <div>
-                    <label className="text-xs font-semibold text-surface-300 uppercase tracking-widest">Your age</label>
-                    <input className="input-field mt-1" type="number" min={18} max={80} value={age} onChange={e => setAge(parseInt(e.target.value) || 28)} />
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-surface-300 uppercase tracking-widest mb-2 block">Or pick your life stage</label>
-                    <div className="grid grid-cols-1 gap-2">
-                      {LIFE_STAGES.map(ls => (
-                        <button key={ls.label} onClick={() => applyLifeStage(ls)}
-                          className="flex items-center gap-3 p-3 rounded-xl border border-surface-100 hover:border-amber-400 hover:bg-amber-50 transition-colors text-left">
-                          <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
-                            <span className="text-xs font-bold text-amber-600">{ls.age}</span>
-                          </div>
+                    <label className="text-xs font-semibold text-surface-400 uppercase tracking-widest block mb-2">
+                      Primary Financial Goal
+                    </label>
+                    <div className="flex flex-col gap-2">
+                      {GOALS.map(g => (
+                        <button key={g.id} onClick={() => setGoal(g.id)}
+                          className={`flex items-start gap-3 p-3.5 rounded-xl border text-left transition-all
+                            ${goal === g.id
+                              ? 'border-amber-400 bg-amber-50'
+                              : 'border-surface-100 hover:border-surface-200 bg-white'}`}>
+                          <div className={`w-4 h-4 rounded-full border-2 mt-0.5 shrink-0 transition-all
+                            ${goal === g.id ? 'border-amber-500 bg-amber-500' : 'border-surface-300'}`} />
                           <div>
-                            <div className="text-sm font-semibold text-surface-800">{ls.label}</div>
-                            <div className="text-xs text-surface-300">Age ~{ls.age} · ₹{(ls.income/1000).toFixed(0)}k/mo income</div>
+                            <p className={`text-sm font-semibold ${goal === g.id ? 'text-amber-800' : 'text-surface-800'}`}>{g.label}</p>
+                            <p className="text-xs text-surface-400 mt-0.5">{g.sub}</p>
                           </div>
                         </button>
                       ))}
@@ -218,173 +345,72 @@ export default function OnboardingWizard({ forceOpen, onClose }: { forceOpen?: b
                 </div>
               )}
 
-              {/* Step 1: Income */}
+              {/* Step 1 — Import zones */}
               {step === 1 && (
-                <div className="flex flex-col gap-4">
-                  <div>
-                    <label className="text-xs font-semibold text-surface-300 uppercase tracking-widest">Monthly take-home salary</label>
-                    <div className="relative mt-1">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-surface-300 font-medium">₹</span>
-                      <input className="input-field pl-7" type="number" value={income} onChange={e => setIncome(parseInt(e.target.value) || 0)} />
-                    </div>
-                    <p className="text-xs text-surface-300 mt-1">Include salary + freelance + any other regular income</p>
-                  </div>
-                  <div className="p-3 bg-amber-50 rounded-xl text-xs text-amber-700">
-                    💡 That's <strong>{fmtINR(income * 12)}</strong> per year
-                  </div>
-                </div>
-              )}
+                <div className="flex flex-col gap-3">
+                  <FileDropZone
+                    label="Bank Statement"
+                    hint="CSV from HDFC, ICICI, SBI, Axis or Kotak — auto-detects your bank and categorises transactions"
+                    accept=".csv,.xlsx"
+                    state={bankZone}
+                    onFile={handleBank}
+                  />
+                  <FileDropZone
+                    label="Mutual Fund Statement (CAS)"
+                    hint="CAMS or KFintech CAS PDF — imports your mutual fund portfolio and SIP history"
+                    accept=".pdf"
+                    state={casZone}
+                    onFile={handleCAS}
+                    password={casPass}
+                    onPassword={p => { setCasPass(p); if (casZone.file) handleCAS(casZone.file) }}
+                  />
+                  <FileDropZone
+                    label="Equity Holdings"
+                    hint="Zerodha, Groww, Angel One, Upstox — CSV export from your broker's portfolio page"
+                    accept=".csv"
+                    state={kiteZone}
+                    onFile={handleKite}
+                  />
+                  <FileDropZone
+                    label="EPF Passbook"
+                    hint="EPFO member passbook PDF — imports your provident fund balance and contribution history"
+                    accept=".pdf"
+                    state={epfZone}
+                    onFile={handleEPF}
+                  />
 
-              {/* Step 2: Expenses */}
-              {step === 2 && (
-                <div className="flex flex-col gap-4">
-                  <div>
-                    <label className="text-xs font-semibold text-surface-300 uppercase tracking-widest">Monthly expenses</label>
-                    <div className="relative mt-1">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-surface-300 font-medium">₹</span>
-                      <input className="input-field pl-7" type="number" value={expenses} onChange={e => setExpenses(parseInt(e.target.value) || 0)} />
-                    </div>
-                    <p className="text-xs text-surface-300 mt-1">Rent + food + bills + EMIs + everything</p>
-                  </div>
-                  {income > 0 && (
-                    <div className={`p-3 rounded-xl text-xs font-medium ${income - expenses > income * 0.2 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-600'}`}>
-                      {income - expenses > 0
-                        ? `✅ You save ${fmtINR(income - expenses)}/mo (${Math.round(((income - expenses) / income) * 100)}% savings rate)`
-                        : `⚠️ Expenses exceed income by ${fmtINR(expenses - income)}`}
+                  {anyImported && (
+                    <div className="mt-1 p-3 bg-emerald-50 border border-emerald-100 rounded-xl text-xs text-emerald-700 font-medium text-center">
+                      {[bankZone, casZone, kiteZone, epfZone].filter(z => z.status === 'done').length} source{[bankZone, casZone, kiteZone, epfZone].filter(z => z.status === 'done').length !== 1 ? 's' : ''} connected — your dashboard will be pre-populated
                     </div>
                   )}
                 </div>
               )}
 
-              {/* Step 3: SIP / Investments */}
-              {step === 3 && (
-                <div className="flex flex-col gap-4">
-                  <div>
-                    <label className="text-xs font-semibold text-surface-300 uppercase tracking-widest">Monthly SIP / investments</label>
-                    <div className="relative mt-1">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-surface-300 font-medium">₹</span>
-                      <input className="input-field pl-7" type="number" value={sip} onChange={e => setSip(parseInt(e.target.value) || 0)} />
-                    </div>
-                    <p className="text-xs text-surface-300 mt-1">Mutual funds, stocks, PPF, NPS — anything you invest monthly</p>
-                  </div>
-                  <div className="p-3 bg-indigo-50 rounded-xl text-xs text-indigo-700">
-                    📈 At 12% returns, <strong>{fmtINR(sip)}/mo</strong> becomes <strong>{fmtINR(Math.round(sip * 12 * ((Math.pow(1.12, 20) - 1) / 0.12)))}</strong> in 20 years
-                  </div>
-                  <div className="grid grid-cols-3 gap-2">
-                    {[5000, 10000, 15000, 25000, 50000, 100000].map(v => (
-                      <button key={v} onClick={() => setSip(v)}
-                        className={`p-2 rounded-xl border text-xs font-medium transition-colors ${sip === v ? 'border-amber-400 bg-amber-50 text-amber-700' : 'border-surface-200 text-surface-800 hover:border-amber-300'}`}>
-                        {fmtINR(v)}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Step 4: Loans */}
-              {step === 4 && (
-                <div className="flex flex-col gap-4">
-                  {loans.length === 0 && (
-                    <div className="p-4 bg-emerald-50 rounded-xl text-center">
-                      <p className="text-emerald-700 font-medium text-sm">No active loans — great start!</p>
-                      <p className="text-xs text-emerald-600 mt-1">You can still add them if you have any</p>
-                    </div>
-                  )}
-                  {loans.map((l, i) => (
-                    <div key={i} className="border border-surface-100 rounded-2xl p-4 flex flex-col gap-3">
-                      <div className="flex items-center justify-between">
-                        <select className="input-field text-sm py-1.5 w-40" value={l.type} onChange={e => updateLoan(i, { type: e.target.value })}>
-                          {LOAN_TYPES.map(t => <option key={t}>{t}</option>)}
-                        </select>
-                        <button onClick={() => removeLoan(i)} className="text-surface-300 hover:text-rose-400"><Trash2 size={14}/></button>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        {[
-                          { label: 'Principal (₹)', key: 'principal', val: l.principal },
-                          { label: 'Rate (%)', key: 'rate', val: l.rate },
-                          { label: 'Tenure (yrs)', key: 'tenureYears', val: l.tenureYears },
-                          { label: 'EMIs paid', key: 'emisPaid', val: l.emisPaid },
-                          { label: 'EMI amount (₹)', key: 'emiAmount', val: l.emiAmount },
-                        ].map(f => (
-                          <div key={f.key}>
-                            <label className="text-[10px] text-surface-300 font-medium">{f.label}</label>
-                            <input className="input-field mt-0.5 text-sm" type="number"
-                              value={f.val || ''} onChange={e => updateLoan(i, { [f.key]: parseFloat(e.target.value) || 0 })} />
-                          </div>
-                        ))}
-                      </div>
-                      {l.principal > 0 && (
-                        <p className="text-xs text-rose-500">Outstanding balance: <strong>{fmtINR(loanBalance(l))}</strong></p>
-                      )}
-                    </div>
-                  ))}
-                  <button onClick={addLoan} className="btn-ghost flex items-center gap-1 text-sm justify-center border border-dashed border-surface-200">
-                    <Plus size={14}/> Add a loan
-                  </button>
-                </div>
-              )}
-
-              {/* Step 5: FIRE target */}
-              {step === 5 && (
-                <div className="flex flex-col gap-4">
-                  <div className="grid grid-cols-2 gap-2">
-                    {[
-                      { label: 'Auto (25× expenses)', value: 'auto' as const },
-                      { label: 'Set my own target', value: 'manual' as const },
-                    ].map(m => (
-                      <button key={m.value} onClick={() => setFireMode(m.value)}
-                        className={`p-3 rounded-xl border text-xs font-medium transition-colors ${fireMode === m.value ? 'border-amber-400 bg-amber-50 text-amber-700' : 'border-surface-200 text-surface-800'}`}>
-                        {m.label}
-                      </button>
-                    ))}
-                  </div>
-
-                  {fireMode === 'auto' ? (
-                    <div className="p-4 bg-amber-50 rounded-xl text-center">
-                      <p className="text-xs text-amber-600 mb-1">Based on your expenses ({fmtINR(expenses)}/mo)</p>
-                      <p className="text-2xl font-bold text-amber-700">{fmtINR(suggestedFire)}</p>
-                      <p className="text-xs text-amber-600 mt-1">= {(expenses * 12).toLocaleString('en-IN')} × 300 months (25 years)</p>
-                    </div>
-                  ) : (
-                    <div>
-                      <label className="text-xs font-semibold text-surface-300 uppercase tracking-widest">Your target corpus</label>
-                      <div className="relative mt-1">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-surface-300 font-medium">₹</span>
-                        <input className="input-field pl-7" type="number" placeholder={String(suggestedFire)}
-                          value={fireTarget || ''} onChange={e => setFireTarget(parseInt(e.target.value) || 0)} />
-                      </div>
-                      <div className="flex flex-wrap gap-2 mt-2">
-                        {[1e7, 5e7, 1e8, 2e8, 5e8, 1e9].map(v => (
-                          <button key={v} onClick={() => setFireTarget(v)}
-                            className={`px-3 py-1.5 rounded-xl border text-xs font-medium transition-colors ${fireTarget === v ? 'border-amber-400 bg-amber-50 text-amber-700' : 'border-surface-200 text-surface-800 hover:border-amber-300'}`}>
-                            {fmtINR(v)}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Nav buttons */}
-              <div className="flex gap-3 mt-2">
+              {/* Navigation */}
+              <div className="flex gap-3 pt-2">
                 {step > 0 && (
-                  <button onClick={() => setStep(s => s - 1)} className="btn-ghost flex items-center gap-1">
-                    <ChevronLeft size={16}/> Back
+                  <button onClick={() => setStep(s => s - 1)} className="btn-ghost flex items-center gap-1.5">
+                    <ChevronLeft size={15}/> Back
                   </button>
                 )}
                 {step < steps.length - 1 ? (
-                  <button onClick={() => setStep(s => s + 1)} className="btn-primary flex-1 flex items-center justify-center gap-1">
-                    Continue <ChevronRight size={16}/>
+                  <button onClick={() => setStep(s => s + 1)}
+                    disabled={step === 0 && !goal}
+                    className="btn-primary flex-1 flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed">
+                    Continue <ChevronRight size={15}/>
                   </button>
                 ) : (
-                  <button onClick={finish} className="btn-primary flex-1 flex items-center justify-center gap-1">
-                    See my score
+                  <button onClick={goToStep3} disabled={anyParsing}
+                    className="btn-primary flex-1 flex items-center justify-center gap-1.5 disabled:opacity-50">
+                    {anyParsing ? <><Loader2 size={14} className="animate-spin"/> Processing...</> : <>See my dashboard <ChevronRight size={15}/></>}
                   </button>
                 )}
               </div>
-              <button onClick={done} className="text-center text-xs text-surface-300 hover:text-surface-800 transition-colors">
-                Skip for now
+
+              <button onClick={done}
+                className="text-center text-xs text-surface-300 hover:text-surface-600 transition-colors -mt-2">
+                Skip setup — I'll add data later
               </button>
             </div>
           )}

@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { Plus, Trash2, ChevronDown, ChevronUp, Pencil, Check, X } from 'lucide-react'
 import { useApp } from '../context/AppContext'
-import { fmt } from '../lib/calc'
+import { fmtINR } from '../lib/calc'
+import EmptyState from './EmptyState'
 import type { Goal } from '../types'
 
 const EMOJIS = ['🏠','🚗','🎓','✈️','💍','👶','🏖️','💻','🏋️','🎸','🛥️','🌍','💊','🎯','🏦','🎨']
@@ -103,7 +104,7 @@ function GoalForm({
 
       {draft.inflate && yearsAway > 0 && (
         <p className="text-xs text-amber-700 bg-amber-100 rounded-lg px-3 py-2">
-          In {yearsAway} years at {draft.inflationRate}% inflation → <strong>{fmt(Math.round(inflated))}</strong>
+          In {yearsAway} years at {draft.inflationRate}% inflation → <strong>{fmtINR(Math.round(inflated))}</strong>
         </p>
       )}
 
@@ -144,9 +145,9 @@ export default function GoalsCard() {
     <div className="card p-4 sm:p-5 flex flex-col gap-4 col-span-full md:col-span-2">
       <div className="flex items-center justify-between">
         <div>
-          <p className="section-title">Life Goals</p>
+          <p className="section-title">Financial Goals</p>
           <p className="text-xs text-surface-300">
-            {data.goals.length} goal{data.goals.length !== 1 ? 's' : ''} · shown as emoji markers on the timeline
+            {data.goals.length} goal{data.goals.length !== 1 ? 's' : ''} · shown as markers on the timeline
           </p>
         </div>
         <button data-expand="goals" className="btn-ghost" onClick={() => setExpanded(v => !v)}>
@@ -172,7 +173,15 @@ export default function GoalsCard() {
 
       {/* Active goals chips */}
       <div className="flex flex-wrap gap-2">
-        {data.goals.length === 0 && (
+        {data.goals.length === 0 && !expanded && (
+          <EmptyState
+            title="No financial goals set"
+            description="Define your goals — a home, education corpus, or retirement — and DhanPath will show you how your savings track against each one."
+            cta="Add your first goal"
+            onCta={() => setExpanded(true)}
+          />
+        )}
+        {data.goals.length === 0 && expanded && (
           <p className="text-xs text-surface-300 italic">No goals yet — add some below</p>
         )}
         {data.goals.map(g => {
@@ -188,7 +197,7 @@ export default function GoalsCard() {
               <span>{g.emoji}</span>
               <div>
                 <div>{g.name}</div>
-                <div className="font-normal opacity-70">Age {g.targetAge} · {fmt(Math.round(inflated))}</div>
+                <div className="font-normal opacity-70">Age {g.targetAge} · {fmtINR(Math.round(inflated))}</div>
               </div>
               <button onClick={e => { e.stopPropagation(); setEditingId(g.id) }}
                 className="opacity-40 hover:opacity-100 transition-opacity ml-1">

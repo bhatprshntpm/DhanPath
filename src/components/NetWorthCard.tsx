@@ -2,7 +2,8 @@ import { useState, useRef } from 'react'
 import { Download, Upload, Plus, ChevronDown, ChevronUp } from 'lucide-react'
 import { useApp } from '../context/AppContext'
 import { exportData, importData } from '../lib/storage'
-import { netWorth, fmt } from '../lib/calc'
+import { netWorth, fmtINR } from '../lib/calc'
+import EmptyState from './EmptyState'
 
 const EMPTY_ASSETS = { checking: 0, savings: 0, brokerage: 0, retirement: 0, realEstate: 0, other: 0 }
 const EMPTY_LIAB   = { mortgage: 0, studentLoans: 0, creditCards: 0, autoLoans: 0, other: 0 }
@@ -56,11 +57,20 @@ export default function NetWorthCard() {
       </div>
 
       <div>
-        <p className="kpi-value">{fmt(nw)}</p>
+        <p className="kpi-value">{fmtINR(nw)}</p>
         <p className="text-xs text-surface-300 mt-0.5">
           {data.snapshots.length} snapshot{data.snapshots.length !== 1 ? 's' : ''} recorded
         </p>
       </div>
+
+      {!data.snapshots.length && !expanded && (
+        <EmptyState
+          title="No snapshots yet"
+          description="Record your assets and liabilities once a month to track your net worth over time."
+          cta="Add your first snapshot"
+          onCta={() => setExpanded(true)}
+        />
+      )}
 
       {expanded && (
         <div className="flex flex-col gap-4 pt-2 border-t border-surface-100 animate-fade-up">

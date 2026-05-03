@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { Plus, ChevronDown, ChevronUp, Trash2 } from 'lucide-react'
 import { useApp } from '../context/AppContext'
-import { debtAvalanche, fmt } from '../lib/calc'
+import { debtAvalanche, fmtINR } from '../lib/calc'
+import EmptyState from './EmptyState'
 
 const DEBT_COLORS = ['#ef4444','#f59e0b','#6366f1','#10b981','#8b5cf6']
 
@@ -37,21 +38,30 @@ export default function DebtCard() {
         </button>
       </div>
 
+      {data.debts.length === 0 && !expanded ? (
+        <EmptyState
+          title="No loans recorded"
+          description="Add your home loan, car loan or any other EMIs to track your debt payoff timeline and optimise your repayment strategy."
+          cta="Add a loan"
+          onCta={() => setExpanded(true)}
+        />
+      ) : (
       <div>
-        <p className="kpi-value text-rose-500">{fmt(totalDebt)}</p>
+        <p className="kpi-value text-rose-500">{fmtINR(totalDebt)}</p>
         {data.debts.length > 0 && (
           <p className="text-xs text-surface-300 mt-0.5">
-            Debt-free in ~{Math.ceil(avalancheMonths / 12)} yrs (avalanche + {fmt(extra)}/mo extra)
+            Debt-free in ~{Math.ceil(avalancheMonths / 12)} yrs (avalanche + {fmtINR(extra)}/mo extra)
           </p>
         )}
       </div>
+      )}
 
       <div className="flex flex-col gap-2">
         {data.debts.map(d => (
           <div key={d.id}>
             <div className="flex justify-between text-xs mb-0.5">
               <span className="font-medium text-surface-800">{d.name}</span>
-              <span className="text-surface-300">{d.rate}% APR · {fmt(d.balance)}</span>
+              <span className="text-surface-300">{d.rate}% APR · {fmtINR(d.balance)}</span>
             </div>
             <div className="w-full bg-surface-100 rounded-full h-1.5">
               <div
@@ -66,7 +76,7 @@ export default function DebtCard() {
       {expanded && (
         <div className="flex flex-col gap-4 pt-2 border-t border-surface-100 animate-fade-up">
           <div>
-            <label className="text-xs text-surface-300 font-medium">Extra monthly payment: {fmt(extra)}</label>
+            <label className="text-xs text-surface-300 font-medium">Extra monthly payment: {fmtINR(extra)}</label>
             <input
               type="range" min={0} max={5000} step={50} value={extra}
               onChange={e => setExtra(Number(e.target.value))}
@@ -74,7 +84,7 @@ export default function DebtCard() {
             />
             {data.debts.length > 0 && (
               <p className="text-xs text-emerald-600 mt-1">
-                Saves {fmt(totalInterest)} in interest · Done in {Math.ceil(avalancheMonths/12)} yrs {avalancheMonths%12} mo
+                Saves {fmtINR(totalInterest)} in interest · Done in {Math.ceil(avalancheMonths/12)} yrs {avalancheMonths%12} mo
               </p>
             )}
           </div>
@@ -101,7 +111,7 @@ export default function DebtCard() {
                     <span className="font-medium text-surface-800">{d.name}</span>
                   </div>
                   <div className="flex items-center gap-3">
-                    <span className="text-rose-500 font-medium">{fmt(d.balance)}</span>
+                    <span className="text-rose-500 font-medium">{fmtINR(d.balance)}</span>
                     <button onClick={() => deleteDebt(d.id)} className="text-surface-300 hover:text-rose-400 transition-colors">
                       <Trash2 size={12}/>
                     </button>

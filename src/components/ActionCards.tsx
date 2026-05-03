@@ -168,7 +168,7 @@ function useActionCards(): ActionCard[] {
         : firePct < 75
         ? 'Solid progress! Compounding kicks in harder from here. Stay consistent.'
         : 'Almost there — protect your portfolio from big drawdowns now.',
-      cta: 'View FIRE plan →',
+      cta: 'View Independence plan →',
       section: 'section-fire',
     })
   }
@@ -188,7 +188,7 @@ export default function ActionCards() {
 
   return (
     <div className="flex flex-col gap-3">
-      <p className="section-title">What to do next</p>
+      <p className="section-title">Recommended Actions</p>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {cards.map((c, i) => {
           const cfg = PRIORITY_CONFIG[c.priority]

@@ -53,7 +53,7 @@ export default function HealthScoreCard() {
   if (!hasData) {
     return (
       <div className="card p-5 flex flex-col gap-4">
-        <p className="section-title">Financial Health Score</p>
+        <p className="section-title">Financial Health Index</p>
         <div className="flex flex-col items-center justify-center gap-4 py-6 text-center">
           <div className="relative">
             <svg width={140} height={140} className="-rotate-90">
@@ -79,7 +79,7 @@ export default function HealthScoreCard() {
 
   return (
     <div className="card p-5 flex flex-col gap-4">
-      <p className="section-title">Financial Health Score</p>
+      <p className="section-title">Financial Health Index</p>
 
       <div className="flex items-center gap-5">
         <div className="relative shrink-0">

@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { Plus, ChevronDown, ChevronUp } from 'lucide-react'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
 import { useApp } from '../context/AppContext'
-import { fmt, fmtPct } from '../lib/calc'
+import { fmtINR, fmtPct } from '../lib/calc'
+import EmptyState from './EmptyState'
 
 const TYPE_COLORS: Record<string, string> = {
   stock: '#f59e0b', etf: '#6366f1', bond: '#10b981',
@@ -39,12 +40,21 @@ export default function PortfolioCard() {
         </button>
       </div>
 
+      {data.holdings.length === 0 && !expanded ? (
+        <EmptyState
+          title="No holdings recorded"
+          description="Upload your equity portfolio from Zerodha, Groww or Angel One, or import your CAMS mutual fund statement."
+          cta="Connect your portfolio"
+          onCta={() => setExpanded(true)}
+        />
+      ) : (
       <div>
-        <p className="kpi-value">{fmt(total)}</p>
+        <p className="kpi-value">{fmtINR(total)}</p>
         <p className={`text-xs font-medium mt-0.5 ${gain >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
-          {gain >= 0 ? '+' : ''}{fmt(gain)} ({fmtPct(gainPct)}) total return
+          {gain >= 0 ? '+' : ''}{fmtINR(gain)} ({fmtPct(gainPct)}) total return
         </p>
       </div>
+      )}
 
       {pieData.length > 0 && (
         <ResponsiveContainer width="100%" height={100}>
@@ -54,7 +64,7 @@ export default function PortfolioCard() {
                 <Cell key={entry.name} fill={TYPE_COLORS[entry.name] ?? '#a8a29e'} />
               ))}
             </Pie>
-            <Tooltip formatter={(v: any) => fmt(v as number)} />
+            <Tooltip formatter={(v: any) => fmtINR(v as number)} />
           </PieChart>
         </ResponsiveContainer>
       )}
@@ -97,7 +107,7 @@ export default function PortfolioCard() {
                     {h.ticker && <span className="text-surface-300 ml-1 font-mono">{h.ticker}</span>}
                   </div>
                   <div className="text-right">
-                    <div className="font-medium text-surface-800">{fmt(h.value)}</div>
+                    <div className="font-medium text-surface-800">{fmtINR(h.value)}</div>
                     <div className={`text-[10px] ${h.value >= h.costBasis ? 'text-emerald-600':'text-rose-500'}`}>
                       {fmtPct(((h.value-h.costBasis)/Math.max(h.costBasis,1))*100)}
                     </div>

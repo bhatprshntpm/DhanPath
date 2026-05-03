@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Plus, Trash2, Eye, EyeOff } from 'lucide-react'
+import { Plus, Trash2, Eye, EyeOff, ChevronDown, ChevronUp } from 'lucide-react'
 import { useApp } from '../context/AppContext'
 import type { Scenario } from '../types'
 
@@ -12,28 +12,58 @@ const PRESETS: Omit<Scenario, 'id'>[] = [
   { name: 'Retire early', color: '#ec4899', enabled: false, assumptions: { monthlyIncome: 10000, monthlyExpenses: 7000, annualReturn: 9, equityReturn: 12, debtReturn: 7, equityAllocation: 70, extraMonthlySavings: 500, sipStepUp: 10, incomeGrowthRate: 5, inflationRate: 6, lifestyleMultiplier: 1.2 } },
 ]
 
-const SLIDERS: { label: string; key: string; min: number; max: number; step: number; prefix?: string; suffix?: string }[] = [
-  { label: 'Monthly Income',      key: 'monthlyIncome',       min: 0,   max: 50000, step: 500,  prefix: '₹' },
-  { label: 'Monthly Expenses',    key: 'monthlyExpenses',     min: 0,   max: 30000, step: 250,  prefix: '₹' },
-  { label: 'Equity Return',       key: 'equityReturn',        min: 0,   max: 25,    step: 0.5,  suffix: '%' },
-  { label: 'Debt Return',         key: 'debtReturn',          min: 0,   max: 15,    step: 0.5,  suffix: '%' },
-  { label: 'Equity Allocation',   key: 'equityAllocation',    min: 0,   max: 100,   step: 5,    suffix: '%' },
-  { label: 'SIP Step-up/yr',      key: 'sipStepUp',           min: 0,   max: 30,    step: 1,    suffix: '%' },
-  { label: 'Income Growth/yr',    key: 'incomeGrowthRate',    min: 0,   max: 20,    step: 0.5,  suffix: '%' },
-  { label: 'Extra Savings/mo',    key: 'extraMonthlySavings', min: 0,   max: 10000, step: 100,  prefix: '₹' },
-  { label: 'Lifestyle (Retire)',  key: 'lifestyleMultiplier', min: 0.5, max: 2.0,   step: 0.1,  suffix: 'x' },
+const PRIMARY_SLIDERS: { label: string; key: string; min: number; max: number; step: number; prefix?: string; suffix?: string }[] = [
+  { label: 'Monthly Income',               key: 'monthlyIncome',       min: 0,   max: 500000, step: 1000, prefix: '₹' },
+  { label: 'Monthly Expenses',             key: 'monthlyExpenses',     min: 0,   max: 300000, step: 1000, prefix: '₹' },
+  { label: 'Additional Monthly Investment', key: 'extraMonthlySavings', min: 0,   max: 100000, step: 500,  prefix: '₹' },
+]
+
+const ADVANCED_SLIDERS: { label: string; key: string; min: number; max: number; step: number; prefix?: string; suffix?: string }[] = [
+  { label: 'Equity Return',              key: 'equityReturn',      min: 0,   max: 25,  step: 0.5, suffix: '%' },
+  { label: 'Debt Return',                key: 'debtReturn',        min: 0,   max: 15,  step: 0.5, suffix: '%' },
+  { label: 'Equity Allocation',          key: 'equityAllocation',  min: 0,   max: 100, step: 5,   suffix: '%' },
+  { label: 'Annual SIP Increment',       key: 'sipStepUp',         min: 0,   max: 30,  step: 1,   suffix: '%' },
+  { label: 'Income Growth Rate',         key: 'incomeGrowthRate',  min: 0,   max: 20,  step: 0.5, suffix: '%' },
+  { label: 'Retirement Spending Factor', key: 'lifestyleMultiplier', min: 0.5, max: 2.0, step: 0.1, suffix: 'x' },
 ]
 
 export default function ScenarioPanel() {
   const { data, addScenario, updateScenario, deleteScenario } = useApp()
-  const [editing, setEditing] = useState<string | null>(null)
+  const [editing, setEditing]         = useState<string | null>(null)
+  const [advancedOpen, setAdvancedOpen] = useState<Record<string, boolean>>({})
 
   const nextColor = COLORS[data.scenarios.length % COLORS.length]
+
+  function toggleAdvanced(id: string) {
+    setAdvancedOpen(v => ({ ...v, [id]: !v[id] }))
+  }
+
+  function SliderRow({ s, sliders }: { s: Scenario; sliders: typeof PRIMARY_SLIDERS }) {
+    return (
+      <div className="flex flex-col gap-2">
+        {sliders.map(({ label, key, min, max, step, prefix, suffix }) => (
+          <div key={key}>
+            <div className="flex justify-between text-xs mb-0.5">
+              <span className="text-surface-400">{label}</span>
+              <span className="font-mono font-medium text-surface-800 tabular-nums">
+                {prefix ?? ''}{(s.assumptions as any)[key]}{suffix ?? ''}
+              </span>
+            </div>
+            <input type="range" min={min} max={max} step={step}
+              value={(s.assumptions as any)[key]}
+              onChange={e => updateScenario({ ...s, assumptions: { ...s.assumptions, [key]: parseFloat(e.target.value) } })}
+              className="w-full accent-amber-500 h-1.5"
+              disabled={!s.enabled} />
+          </div>
+        ))}
+      </div>
+    )
+  }
 
   return (
     <div className="card p-4 sm:p-6 flex flex-col gap-5">
       <div className="flex items-center justify-between">
-        <p className="section-title">Scenario Planner</p>
+        <p className="section-title">Scenario Analysis</p>
         <span className="text-xs text-surface-300">Sliders update the timeline in real-time</span>
       </div>
 
@@ -77,22 +107,19 @@ export default function ScenarioPanel() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-2">
-              {SLIDERS.map(({ label, key, min, max, step, prefix, suffix }) => (
-                <div key={key}>
-                  <div className="flex justify-between text-xs mb-0.5">
-                    <span className="text-surface-300">{label}</span>
-                    <span className="font-mono font-medium text-surface-800">
-                      {prefix ?? ''}{(s.assumptions as any)[key]}{suffix ?? ''}
-                    </span>
-                  </div>
-                  <input type="range" min={min} max={max} step={step}
-                    value={(s.assumptions as any)[key]}
-                    onChange={e => updateScenario({ ...s, assumptions: { ...s.assumptions, [key]: parseFloat(e.target.value) } })}
-                    className="w-full accent-amber-500"
-                    disabled={!s.enabled} />
+            <SliderRow s={s} sliders={PRIMARY_SLIDERS} />
+
+            <div>
+              <button onClick={() => toggleAdvanced(s.id)}
+                className="flex items-center gap-1 text-xs text-surface-400 hover:text-surface-700 transition-colors mt-1">
+                {advancedOpen[s.id] ? <ChevronUp size={12}/> : <ChevronDown size={12}/>}
+                Advanced parameters
+              </button>
+              {advancedOpen[s.id] && (
+                <div className="mt-3 p-3 bg-surface-50 rounded-xl border border-surface-100">
+                  <SliderRow s={s} sliders={ADVANCED_SLIDERS} />
                 </div>
-              ))}
+              )}
             </div>
           </div>
         ))}
