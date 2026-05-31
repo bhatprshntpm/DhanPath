@@ -32,6 +32,8 @@ export interface Holding {
   name: string
   ticker: string
   type: 'stock' | 'etf' | 'bond' | 'crypto' | 'retirement' | 'cash'
+  assetClass?: string
+  subType?: string
   value: number
   costBasis: number
 }

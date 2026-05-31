@@ -30,11 +30,20 @@ export default function HeroSection() {
     return s.date >= d.toISOString().slice(0, 7)
   })
 
-  const nwNow     = latest
-    ? netWorth(latest)
-    : data.holdings.length > 0
-      ? data.holdings.reduce((a, h) => a + h.value, 0) - data.debts.reduce((a, d) => a + d.balance, 0)
-      : 0
+  const nwNow = (() => {
+    if (data.holdings.length > 0) {
+      const investedTotal = data.holdings.reduce((a, h) => a + h.value, 0)
+      const cashExtra = latest
+        ? (latest.assets.checking + latest.assets.savings + latest.assets.realEstate)
+        : 0
+      const liabilities = latest
+        ? Object.values(latest.liabilities).reduce((a, b) => a + b, 0)
+        : data.debts.reduce((a, d) => a + d.balance, 0)
+      return investedTotal + cashExtra - liabilities
+    }
+    if (latest) return netWorth(latest)
+    return 0
+  })()
   const nwPrev    = prevMonth ? netWorth(prevMonth)  : 0
   const nwYearAgo = yearAgo   ? netWorth(yearAgo)    : 0
   const momChange = nwNow - nwPrev

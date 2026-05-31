@@ -61,17 +61,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const addOrUpdateSnapshot = (s: Omit<NetWorthSnapshot, 'id'>) => {
     const existing = get().snapshots.find(x => x.date === s.date)
     if (existing) {
-      // Merge: add portfolio values on top of existing (don't overwrite manual entries)
       const merged: NetWorthSnapshot = {
         ...existing,
         assets: {
           checking:   existing.assets.checking,
-          savings:    existing.assets.savings   + (s.assets.savings   || 0),
+          savings:    existing.assets.savings,
           brokerage:  s.assets.brokerage > 0 ? s.assets.brokerage : existing.assets.brokerage,
           retirement: s.assets.retirement > 0 ? s.assets.retirement : existing.assets.retirement,
           realEstate: existing.assets.realEstate,
-          other:      existing.assets.other     + (s.assets.other     || 0),
+          other:      s.assets.other > 0 ? s.assets.other : existing.assets.other,
         },
+        liabilities: existing.liabilities,
       }
       update({ ...get(), snapshots: get().snapshots.map(x => x.id === existing.id ? merged : x) })
     } else {

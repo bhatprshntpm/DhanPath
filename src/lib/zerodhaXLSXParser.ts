@@ -309,11 +309,13 @@ function makeSummary(holdings: ZerodhaHolding[]): ZerodhaParseResult['summary'] 
 
 export function zerodhaToHoldings(parsed: ZerodhaParseResult): Omit<Holding, 'id'>[] {
   return parsed.holdings.map(h => ({
-    name:      h.symbol,
-    ticker:    h.isin,
-    type:      holdingType(h),
-    value:     Math.round(h.currentValue),
-    costBasis: Math.round(h.costBasis),
+    name:       h.symbol,
+    ticker:     h.isin,
+    type:       holdingType(h),
+    assetClass: h.assetClass,
+    subType:    h.subType,
+    value:      Math.round(h.currentValue),
+    costBasis:  Math.round(h.costBasis),
   }))
 }
 

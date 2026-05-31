@@ -32,6 +32,7 @@ export const CLASS_HINTS: Record<string, string> = {
 }
 
 function holdingClass(h: Holding): string {
+  if (h.assetClass) return h.assetClass
   if (h.type === 'stock')      return 'Equity'
   if (h.type === 'etf')        return 'Equity'
   if (h.type === 'bond')       return 'Debt'
@@ -42,6 +43,7 @@ function holdingClass(h: Holding): string {
 }
 
 function holdingSubType(h: Holding): string {
+  if (h.subType) return h.subType
   if (h.type === 'stock')      return 'Direct Stock'
   if (h.type === 'etf')        return 'Mutual Fund / ETF'
   if (h.type === 'bond')       return 'Debt / Fixed Income'
