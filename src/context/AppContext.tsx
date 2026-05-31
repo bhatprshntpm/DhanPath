@@ -15,6 +15,7 @@ interface AppContextValue {
   deleteTransaction: (id: string)                      => void
   addHolding:        (h: Omit<Holding, 'id'>)        => void
   replaceHoldings:   (hs: Omit<Holding, 'id'>[])      => void
+  updateHolding:     (id: string, patch: Partial<Holding>) => void
   deleteHolding:     (id: string)                     => void
   addDebt:        (d: Omit<Debt, 'id'>)             => void
   updateDebt:     (d: Debt)                          => void
@@ -92,6 +93,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const replaceHoldings   = (hs: Omit<Holding, 'id'>[]) =>
     update({ ...get(), holdings: hs.map(h => ({ ...h, id: nanoid() })) })
 
+  const updateHolding     = (id: string, patch: Partial<Holding>) =>
+    update({ ...get(), holdings: get().holdings.map(h => h.id === id ? { ...h, ...patch } : h) })
+
   const deleteHolding     = (id: string) =>
     update({ ...get(), holdings: get().holdings.filter(x => x.id !== id) })
 
@@ -132,7 +136,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       data, loading,
       addSnapshot, addOrUpdateSnapshot,
       addTransaction, deleteTransaction,
-      addHolding, replaceHoldings, deleteHolding,
+      addHolding, replaceHoldings, updateHolding, deleteHolding,
       addDebt, updateDebt, deleteDebt,
       addGoal, updateGoal, deleteGoal,
       addScenario, updateScenario, deleteScenario,

@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, Plus, Trash2, RefreshCw } from 'lucide-react'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
 import { useApp } from '../context/AppContext'
 import { fmtINR, fmtPct } from '../lib/calc'
+import { refreshAllPrices } from '../lib/livePrice'
 import EmptyState from './EmptyState'
 import type { Holding } from '../types'
 
@@ -53,9 +54,12 @@ function holdingSubType(h: Holding): string {
 }
 
 export default function AssetAllocationCard() {
-  const { data, addHolding, deleteHolding } = useApp()
+  const { data, addHolding, deleteHolding, updateHolding } = useApp()
   const [expandedClass, setExpandedClass] = useState<string | null>(null)
   const [showAddForm,   setShowAddForm]   = useState(false)
+  const [refreshing,    setRefreshing]    = useState(false)
+  const [refreshProgress, setRefreshProgress] = useState({ done: 0, total: 0 })
+  const [refreshResult, setRefreshResult] = useState<{ updated: number; failed: number } | null>(null)
   const [form, setForm] = useState({ name: '', ticker: '', type: 'etf' as const, value: '', costBasis: '' })
 
   const latest = data.snapshots.length
@@ -114,6 +118,21 @@ export default function AssetAllocationCard() {
     setShowAddForm(false)
   }
 
+  async function handleRefresh() {
+    if (refreshing || !data.holdings.length) return
+    setRefreshing(true)
+    setRefreshResult(null)
+    const result = await refreshAllPrices(
+      data.holdings,
+      (done, total) => setRefreshProgress({ done, total }),
+      updateHolding,
+    )
+    setRefreshResult({ updated: result.updated, failed: result.failed })
+    setRefreshing(false)
+  }
+
+  const lastUpdated = data.holdings.find(h => h.priceUpdatedAt)?.priceUpdatedAt
+
   const hasAnyData = total > 0
 
   return (
@@ -123,14 +142,39 @@ export default function AssetAllocationCard() {
         <div>
           <p className="section-title">Asset Allocation</p>
           {hasAnyData && (
-            <p className="text-xs text-surface-300 mt-0.5">{data.holdings.length} holdings</p>
+            <p className="text-xs text-surface-300 mt-0.5">
+              {data.holdings.length} holdings
+              {lastUpdated && (
+                <span className="ml-1.5 text-surface-200">
+                  · prices as of {new Date(lastUpdated).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              )}
+            </p>
           )}
         </div>
-        <button onClick={() => setShowAddForm(v => !v)}
-          className="btn-ghost flex items-center gap-1 text-xs">
-          <Plus size={13}/> Add
-        </button>
+        <div className="flex items-center gap-2">
+          {hasAnyData && (
+            <button onClick={handleRefresh} disabled={refreshing}
+              className="btn-ghost flex items-center gap-1 text-xs disabled:opacity-50">
+              <RefreshCw size={12} className={refreshing ? 'animate-spin' : ''}/>
+              {refreshing
+                ? refreshProgress.total > 0 ? `${refreshProgress.done}/${refreshProgress.total}` : '…'
+                : 'Refresh prices'}
+            </button>
+          )}
+          <button onClick={() => setShowAddForm(v => !v)}
+            className="btn-ghost flex items-center gap-1 text-xs">
+            <Plus size={13}/> Add
+          </button>
+        </div>
       </div>
+
+      {refreshResult && (
+        <p className="text-[11px] text-surface-400 -mt-2">
+          Updated {refreshResult.updated} holdings
+          {refreshResult.failed > 0 && ` · ${refreshResult.failed} could not be fetched (no public price)`}
+        </p>
+      )}
 
       {/* Add form */}
       {showAddForm && (

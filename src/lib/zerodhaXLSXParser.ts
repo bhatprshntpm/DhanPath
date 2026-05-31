@@ -314,6 +314,9 @@ export function zerodhaToHoldings(parsed: ZerodhaParseResult): Omit<Holding, 'id
     type:       holdingType(h),
     assetClass: h.assetClass,
     subType:    h.subType,
+    qty:        h.qty,
+    avgPrice:   h.avgPrice,
+    lastPrice:  h.currentPrice,
     value:      Math.round(h.currentValue),
     costBasis:  Math.round(h.costBasis),
   }))
