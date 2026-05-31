@@ -67,8 +67,12 @@ function extractNumbers(line: string): number[] {
 }
 
 function isSkippable(name: string, ticker: string): boolean {
-  return name.includes('MMKT') || name.includes('TREASURY') ||
-         name.includes('MONEY MARKET') || ticker === 'FYIXX'
+  const n = name.toUpperCase()
+  return n.includes('MMKT') || n.includes('TREASURY') ||
+         n.includes('MONEY MARKET') || n.includes('ACCRUED') ||
+         n.startsWith('TOTAL') || n.startsWith('ENDING') ||
+         n.startsWith('BEGINNING') || n.startsWith('CHANGE IN') ||
+         ticker === 'FYIXX' || ticker === 'AI'
 }
 
 // ─── Parse numbers after a stock entry into qty/price/value/cost ──────────────
