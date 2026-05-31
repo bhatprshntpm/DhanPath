@@ -1,13 +1,19 @@
-import { createContext, useContext, useState, useCallback, type ReactNode } from 'react'
+import {
+  createContext, useContext, useState, useCallback,
+  useEffect, useRef, type ReactNode,
+} from 'react'
 import type { AppData, NetWorthSnapshot, Transaction, Holding, Debt, Goal, Scenario, Settings } from '../types'
-import { loadData, saveData } from '../lib/storage'
+import { loadData, saveData, DEFAULT_DATA } from '../lib/storage'
 import { nanoid } from '../lib/nanoid'
 
 interface AppContextValue {
-  data: AppData
+  data:        AppData
+  loading:     boolean
   addSnapshot:    (s: Omit<NetWorthSnapshot, 'id'>) => void
   addTransaction: (t: Omit<Transaction, 'id'>)      => void
+  deleteTransaction: (id: string)                   => void
   addHolding:     (h: Omit<Holding, 'id'>)          => void
+  deleteHolding:  (id: string)                       => void
   addDebt:        (d: Omit<Debt, 'id'>)             => void
   updateDebt:     (d: Debt)                          => void
   deleteDebt:     (id: string)                       => void
@@ -24,57 +30,81 @@ interface AppContextValue {
 const AppContext = createContext<AppContextValue | null>(null)
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [data, setData] = useState<AppData>(() => loadData())
+  const [data, setData]       = useState<AppData>(DEFAULT_DATA)
+  const [loading, setLoading] = useState(true)
+  const latestData            = useRef<AppData>(DEFAULT_DATA)
 
-  const update = useCallback((next: AppData) => {
-    setData(next)
-    saveData(next)
+  // Async initial load from IndexedDB
+  useEffect(() => {
+    loadData().then(d => {
+      setData(d)
+      latestData.current = d
+      setLoading(false)
+    })
   }, [])
 
-  const addSnapshot    = (s: Omit<NetWorthSnapshot, 'id'>) =>
-    update({ ...data, snapshots: [...data.snapshots, { ...s, id: nanoid() }] })
+  // Always use latest ref in mutations to avoid stale closure issues
+  const update = useCallback((next: AppData) => {
+    latestData.current = next
+    setData(next)
+    saveData(next)   // fire-and-forget async write
+  }, [])
 
-  const addTransaction = (t: Omit<Transaction, 'id'>) =>
-    update({ ...data, transactions: [...data.transactions, { ...t, id: nanoid() }] })
+  // Use ref-based data for all mutations so they never close over stale state
+  const get = () => latestData.current
 
-  const addHolding     = (h: Omit<Holding, 'id'>) =>
-    update({ ...data, holdings: [...data.holdings, { ...h, id: nanoid() }] })
+  const addSnapshot       = (s: Omit<NetWorthSnapshot, 'id'>) =>
+    update({ ...get(), snapshots: [...get().snapshots, { ...s, id: nanoid() }] })
 
-  const addDebt        = (d: Omit<Debt, 'id'>) =>
-    update({ ...data, debts: [...data.debts, { ...d, id: nanoid() }] })
+  const addTransaction    = (t: Omit<Transaction, 'id'>) =>
+    update({ ...get(), transactions: [...get().transactions, { ...t, id: nanoid() }] })
 
-  const updateDebt     = (d: Debt) =>
-    update({ ...data, debts: data.debts.map(x => x.id === d.id ? d : x) })
+  const deleteTransaction = (id: string) =>
+    update({ ...get(), transactions: get().transactions.filter(x => x.id !== id) })
 
-  const deleteDebt     = (id: string) =>
-    update({ ...data, debts: data.debts.filter(x => x.id !== id) })
+  const addHolding        = (h: Omit<Holding, 'id'>) =>
+    update({ ...get(), holdings: [...get().holdings, { ...h, id: nanoid() }] })
 
-  const addGoal        = (g: Omit<Goal, 'id'>) =>
-    update({ ...data, goals: [...data.goals, { ...g, id: nanoid() }] })
+  const deleteHolding     = (id: string) =>
+    update({ ...get(), holdings: get().holdings.filter(x => x.id !== id) })
 
-  const updateGoal     = (g: Goal) =>
-    update({ ...data, goals: data.goals.map(x => x.id === g.id ? g : x) })
+  const addDebt           = (d: Omit<Debt, 'id'>) =>
+    update({ ...get(), debts: [...get().debts, { ...d, id: nanoid() }] })
 
-  const deleteGoal     = (id: string) =>
-    update({ ...data, goals: data.goals.filter(x => x.id !== id) })
+  const updateDebt        = (d: Debt) =>
+    update({ ...get(), debts: get().debts.map(x => x.id === d.id ? d : x) })
 
-  const addScenario    = (s: Omit<Scenario, 'id'>) =>
-    update({ ...data, scenarios: [...data.scenarios, { ...s, id: nanoid() }] })
+  const deleteDebt        = (id: string) =>
+    update({ ...get(), debts: get().debts.filter(x => x.id !== id) })
 
-  const updateScenario = (s: Scenario) =>
-    update({ ...data, scenarios: data.scenarios.map(x => x.id === s.id ? s : x) })
+  const addGoal           = (g: Omit<Goal, 'id'>) =>
+    update({ ...get(), goals: [...get().goals, { ...g, id: nanoid() }] })
 
-  const deleteScenario = (id: string) =>
-    update({ ...data, scenarios: data.scenarios.filter(x => x.id !== id) })
+  const updateGoal        = (g: Goal) =>
+    update({ ...get(), goals: get().goals.map(x => x.id === g.id ? g : x) })
 
-  const updateSettings = (s: Partial<Settings>) =>
-    update({ ...data, settings: { ...data.settings, ...s } })
+  const deleteGoal        = (id: string) =>
+    update({ ...get(), goals: get().goals.filter(x => x.id !== id) })
 
-  const replaceData    = (d: AppData) => update(d)
+  const addScenario       = (s: Omit<Scenario, 'id'>) =>
+    update({ ...get(), scenarios: [...get().scenarios, { ...s, id: nanoid() }] })
+
+  const updateScenario    = (s: Scenario) =>
+    update({ ...get(), scenarios: get().scenarios.map(x => x.id === s.id ? s : x) })
+
+  const deleteScenario    = (id: string) =>
+    update({ ...get(), scenarios: get().scenarios.filter(x => x.id !== id) })
+
+  const updateSettings    = (s: Partial<Settings>) =>
+    update({ ...get(), settings: { ...get().settings, ...s } })
+
+  const replaceData       = (d: AppData) => update(d)
 
   return (
     <AppContext.Provider value={{
-      data, addSnapshot, addTransaction, addHolding,
+      data, loading,
+      addSnapshot, addTransaction, deleteTransaction,
+      addHolding, deleteHolding,
       addDebt, updateDebt, deleteDebt,
       addGoal, updateGoal, deleteGoal,
       addScenario, updateScenario, deleteScenario,

@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react'
-import { Download, Upload, Plus, ChevronDown, ChevronUp } from 'lucide-react'
+import { Upload, Plus, ChevronDown, ChevronUp } from 'lucide-react'
 import { useApp } from '../context/AppContext'
-import { exportData, importData } from '../lib/storage'
+import { importData } from '../lib/storage'
 import { netWorth, fmtINR } from '../lib/calc'
 import EmptyState from './EmptyState'
 
@@ -125,13 +125,10 @@ export default function NetWorthCard() {
           </form>
 
           <div className="flex gap-2 pt-2 border-t border-surface-100">
-            <button onClick={() => exportData(data)} className="btn-ghost flex items-center gap-1 flex-1 justify-center text-xs">
-              <Download size={13}/> Export JSON
-            </button>
             <button onClick={() => fileRef.current?.click()} className="btn-ghost flex items-center gap-1 flex-1 justify-center text-xs">
-              <Upload size={13}/> Import JSON
+              <Upload size={13}/> Import JSON backup
             </button>
-            <input ref={fileRef} type="file" accept=".json" className="hidden" onChange={handleImport} />
+            <input ref={fileRef} type="file" accept=".json,.dpat" className="hidden" onChange={handleImport} />
           </div>
         </div>
       )}

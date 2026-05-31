@@ -4,6 +4,7 @@ import { useApp } from './context/AppContext'
 import Header from './components/Header'
 import OnboardingWizard from './components/OnboardingWizard'
 import DemoBanner from './components/DemoBanner'
+import BackupReminder from './components/BackupReminder'
 import KpiRow from './components/KpiRow'
 import HealthScoreCard from './components/HealthScoreCard'
 import ActionCards from './components/ActionCards'
@@ -24,7 +25,7 @@ import { DEMO_FLAG, ONBOARD_KEY, setDemoMode, isDemoMode } from './lib/demoData'
 function AppContent() {
   const [wizardOpen, setWizardOpen] = useState(false)
   const [demoMode, setDemoMode_]    = useState(() => isDemoMode())
-  const { data }                    = useApp()
+  const { data, loading } = useApp()
 
   // Auto-load demo on very first visit
   useEffect(() => {
@@ -45,11 +46,19 @@ function AppContent() {
   const hasAnyData      = data.snapshots.length > 0 || data.transactions.length > 0 || data.holdings.length > 0 || data.debts.length > 0
   const hasPlanningData = data.snapshots.length > 0 || data.holdings.length > 0
 
+  if (loading) return (
+    <div className="min-h-screen bg-surface-50 flex items-center justify-center gap-3">
+      <img src="/DhanPath/logo.png" alt="DhanPath" className="h-10 w-auto mix-blend-multiply animate-pulse" />
+      <span className="text-sm text-surface-400 font-medium">Loading your data…</span>
+    </div>
+  )
+
   return (
     <div className="min-h-screen bg-surface-50">
       <OnboardingWizard forceOpen={wizardOpen} onClose={() => { setWizardOpen(false); setDemoMode_(false) }} />
       <Header onEditProfile={() => setWizardOpen(true)} />
       {demoMode && <DemoBanner onUseMyData={handleUseMyData} />}
+      <BackupReminder />
       <main className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 flex flex-col gap-4 sm:gap-8">
 
         <KpiRow />
