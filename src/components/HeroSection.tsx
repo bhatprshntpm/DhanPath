@@ -16,7 +16,7 @@ function shortMonth(yyyyMM: string) {
 
 export default function HeroSection() {
   const { data } = useApp()
-  const { snapshots, transactions, settings, scenarios } = data
+  const { snapshots, transactions, settings } = data
 
   // Net worth history
   const sorted = useMemo(
@@ -60,7 +60,6 @@ export default function HeroSection() {
   // Key stats
   const hs       = useMemo(() => calcHealthScore(data), [data])
   const hasData  = snapshots.length > 0 || transactions.length > 0
-  const baseline = scenarios.find(s => s.id === 'baseline') ?? scenarios[0]
   const thisMonth = new Date().toISOString().slice(0, 7)
   const cf       = monthlyCashFlow(transactions, thisMonth)
   const savingsRate = cf.income > 0 ? Math.round((cf.net / cf.income) * 100) : 0

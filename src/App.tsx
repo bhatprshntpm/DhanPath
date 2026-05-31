@@ -28,7 +28,7 @@ function scrollTo(sectionId: string) {
 function AppContent() {
   const [wizardOpen, setWizardOpen]   = useState(false)
   const [demoMode,   setDemoMode_]    = useState(() => isDemoMode())
-  const { data, loading }             = useApp()
+  const { loading } = useApp()
 
   useEffect(() => {
     const onboarded = localStorage.getItem(ONBOARD_KEY)
