@@ -28,12 +28,15 @@ const TABS = [
 
 // ─── Zerodha XLSX import tab ──────────────────────────────────────────────────
 function ZerodhaTab() {
-  const { replaceHoldings, addOrUpdateSnapshot } = useApp()
+  const { data, replaceHoldings, addOrUpdateSnapshot } = useApp()
   const fileRef   = useRef<HTMLInputElement>(null)
   const [parsing,  setParsing]  = useState(false)
   const [progress, setProgress] = useState({ done: 0, total: 0 })
   const [result,   setResult]   = useState<ZerodhaParseResult | null>(null)
   const [imported, setImported] = useState(false)
+  const [clearing, setClearing] = useState(false)
+
+  const zerodhaHoldings = data.holdings.filter(h => h.assetClass !== 'International')
 
   async function handleFile(file: File) {
     setParsing(true)
@@ -53,12 +56,33 @@ function ZerodhaTab() {
     setImported(true)
   }
 
-  function reset() { setResult(null); setImported(false) }
+  function doClear() {
+    if (!clearing) { setClearing(true); return }
+    replaceHoldings(data.holdings.filter(h => h.assetClass === 'International'))
+    setClearing(false)
+    setResult(null)
+    setImported(false)
+  }
+
+  function reset() { setResult(null); setImported(false); setClearing(false) }
 
   const today = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
 
   return (
     <div className="flex flex-col gap-5">
+      {/* Status bar when holdings exist */}
+      {zerodhaHoldings.length > 0 && !result && (
+        <div className="flex items-center justify-between px-3 py-2 bg-surface-50 rounded-xl border border-surface-100">
+          <p className="text-xs text-surface-600">
+            <span className="font-semibold">{zerodhaHoldings.length} holdings</span> currently imported from Zerodha
+          </p>
+          <button onClick={doClear} onBlur={() => setClearing(false)}
+            className={`text-[11px] px-2.5 py-1 rounded-lg border transition-colors
+              ${clearing ? 'border-rose-400 bg-rose-50 text-rose-600 font-semibold' : 'border-surface-200 text-surface-400 hover:text-rose-500 hover:border-rose-200'}`}>
+            {clearing ? 'Tap again to clear' : 'Clear'}
+          </button>
+        </div>
+      )}
       {/* Instructions */}
       <div className="bg-[#387ed1]/5 border border-[#387ed1]/20 rounded-xl p-4 text-xs text-surface-700 flex flex-col gap-1.5">
         <p className="font-semibold text-surface-800">How to download your Zerodha holdings</p>
@@ -167,7 +191,8 @@ function ZerodhaTab() {
 
 // ─── Fidelity PDF import tab ─────────────────────────────────────────────────
 function FidelityTab() {
-  const { upsertHoldings } = useApp()
+  const { data, upsertHoldings, deleteHolding } = useApp()
+  const fidelityHoldings = data.holdings.filter(h => h.assetClass === 'International')
   const fileRef  = useRef<HTMLInputElement>(null)
   const [parsing,  setParsing]  = useState(false)
   const [result,   setResult]   = useState<FidelityParseResult | null>(null)
@@ -199,6 +224,21 @@ function FidelityTab() {
 
   return (
     <div className="flex flex-col gap-5">
+      {/* Currently saved Fidelity holdings */}
+      {fidelityHoldings.length > 0 && !result && (
+        <div className="flex flex-col gap-1.5 px-3 py-2.5 bg-surface-50 rounded-xl border border-surface-100">
+          <p className="text-xs font-semibold text-surface-600">Currently in portfolio</p>
+          {fidelityHoldings.map(h => (
+            <div key={h.id} className="flex items-center justify-between">
+              <span className="text-xs text-surface-700 font-medium">{h.name} <span className="text-surface-300 font-normal font-mono">{h.ticker}</span></span>
+              <button onClick={() => deleteHolding(h.id)}
+                className="text-[10px] text-surface-300 hover:text-rose-400 transition-colors px-1.5 py-0.5 rounded border border-transparent hover:border-rose-200">
+                Remove
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
       <div className="bg-blue-500/5 border border-blue-500/20 rounded-xl p-4 text-xs text-surface-700 flex flex-col gap-1.5">
         <p className="font-semibold text-surface-800">How to get your Fidelity statement</p>
         <p>1. Log in to <strong>netbenefits.fidelity.com</strong></p>
@@ -310,34 +350,16 @@ function FidelityTab() {
 
 // ─── Main accordion ─────────────────────────────────────────────────────────────
 
-const RESET_SECTIONS = [
-  { key: 'holdings',     label: 'Holdings',     desc: 'Stocks, MFs, ETFs' },
-  { key: 'snapshots',    label: 'Net Worth',    desc: 'Monthly snapshots' },
-  { key: 'transactions', label: 'Transactions', desc: 'Income & expenses' },
-  { key: 'debts',        label: 'Loans',        desc: 'Loan entries' },
-  { key: 'goals',        label: 'Goals',        desc: 'Financial goals' },
-  { key: 'all',          label: 'Everything',   desc: 'Full reset incl. settings' },
-] as const
-
 export default function DataManagement() {
-  const [open,       setOpen]       = useState(false)
-  const [activeTab,  setActiveTab]  = useState('zerodha')
-  const [showReset,  setShowReset]  = useState(false)
-  const [pendingKey, setPendingKey] = useState<string | null>(null)
-  const { data, replaceData } = useApp()
+  const [open,        setOpen]        = useState(false)
+  const [activeTab,   setActiveTab]   = useState('zerodha')
+  const [confirmingReset, setConfirmingReset] = useState(false)
+  const { replaceData } = useApp()
 
-  function confirmReset(key: string) {
-    if (pendingKey === key) {
-      if (key === 'all') {
-        replaceData(DEFAULT_DATA)
-      } else {
-        replaceData({ ...data, [key]: (DEFAULT_DATA as any)[key] })
-      }
-      setPendingKey(null)
-      setShowReset(false)
-    } else {
-      setPendingKey(key)
-    }
+  function handleResetAll() {
+    if (!confirmingReset) { setConfirmingReset(true); return }
+    replaceData(DEFAULT_DATA)
+    setConfirmingReset(false)
   }
 
   return (
@@ -355,40 +377,17 @@ export default function DataManagement() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {confirmingReset && <span className="text-[11px] text-rose-500 font-medium">Tap again to confirm</span>}
           <button
-            onClick={e => { e.stopPropagation(); setShowReset(v => !v); setPendingKey(null) }}
-            className="text-[11px] px-2.5 py-1 rounded-lg border border-surface-200 text-surface-400 hover:text-rose-500 hover:border-rose-200 transition-colors">
-            Reset data
+            onClick={e => { e.stopPropagation(); handleResetAll() }}
+            onBlur={() => setConfirmingReset(false)}
+            className={`text-[11px] px-2.5 py-1 rounded-lg border transition-colors
+              ${confirmingReset ? 'border-rose-400 bg-rose-50 text-rose-600' : 'border-surface-200 text-surface-400 hover:text-rose-500 hover:border-rose-200'}`}>
+            Reset all
           </button>
           {open ? <ChevronUp size={16} className="text-surface-400" /> : <ChevronDown size={16} className="text-surface-400" />}
         </div>
       </button>
-
-      {showReset && (
-        <div className="border-t border-surface-100 px-5 py-4 bg-rose-50/40 animate-fade-up">
-          <p className="text-xs font-semibold text-surface-600 mb-3">Select what to reset — click once to arm, click again to confirm</p>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            {RESET_SECTIONS.map(s => {
-              const armed = pendingKey === s.key
-              return (
-                <button key={s.key} onClick={() => confirmReset(s.key)}
-                  onBlur={() => { if (pendingKey === s.key) setPendingKey(null) }}
-                  className={`flex flex-col items-start gap-0.5 px-3 py-2.5 rounded-xl border text-left transition-all
-                    ${armed
-                      ? 'border-rose-400 bg-rose-100 text-rose-700'
-                      : s.key === 'all'
-                        ? 'border-rose-200 text-rose-500 hover:bg-rose-50'
-                        : 'border-surface-200 text-surface-600 hover:border-rose-200 hover:text-rose-500'}`}>
-                  <span className="text-xs font-semibold">{armed ? 'Confirm reset' : s.label}</span>
-                  <span className="text-[10px] opacity-70">{s.desc}</span>
-                </button>
-              )
-            })}
-          </div>
-          <button onClick={() => { setShowReset(false); setPendingKey(null) }}
-            className="mt-3 text-[11px] text-surface-400 hover:text-surface-600">Cancel</button>
-        </div>
-      )}
 
       {open && (
         <div className="border-t border-surface-100 animate-fade-up">
