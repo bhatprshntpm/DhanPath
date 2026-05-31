@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx'
+import type { Holding, NetWorthSnapshot } from '../types'
 import { classifyAll } from './holdingClassifier'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -303,7 +304,7 @@ function makeSummary(holdings: ZerodhaHolding[]): ZerodhaParseResult['summary'] 
 
 // ─── Convert to AppData holdings ──────────────────────────────────────────────
 
-import type { Holding } from '../types'
+
 
 export function zerodhaToHoldings(parsed: ZerodhaParseResult): Omit<Holding, 'id'>[] {
   return parsed.holdings.map(h => ({
@@ -323,4 +324,24 @@ function holdingType(h: ZerodhaHolding): Holding['type'] {
   if (h.assetClass === 'International')        return 'etf'
   if (h.assetClass === 'Direct Equity')        return 'stock'
   return 'etf'
+}
+
+
+export function zerodhaToSnapshot(parsed: ZerodhaParseResult): Omit<NetWorthSnapshot, 'id'> {
+  const by: Record<string, number> = {}
+  for (const h of parsed.holdings) {
+    by[h.assetClass] = (by[h.assetClass] ?? 0) + h.currentValue
+  }
+  return {
+    date: new Date().toISOString().slice(0, 7),
+    assets: {
+      checking:   0,
+      savings:    Math.round(by['Debt'] ?? 0),
+      brokerage:  Math.round((by['Direct Equity'] ?? 0) + (by['Equity Mutual Funds'] ?? 0) + (by['Index Funds & ETFs'] ?? 0) + (by['International'] ?? 0)),
+      retirement: 0,
+      realEstate: 0,
+      other:      Math.round(by['Gold'] ?? 0),
+    },
+    liabilities: { mortgage: 0, studentLoans: 0, creditCards: 0, autoLoans: 0, other: 0 },
+  }
 }

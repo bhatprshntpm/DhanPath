@@ -9,7 +9,7 @@ import GoalsCard from './GoalsCard'
 import SipCalculator from './SipCalculator'
 import ScenarioPanel from './ScenarioPanel'
 import PortfolioBreakdown from './PortfolioBreakdown'
-import { parseZerodhaXLSX, zerodhaToHoldings } from '../lib/zerodhaXLSXParser'
+import { parseZerodhaXLSX, zerodhaToHoldings, zerodhaToSnapshot } from '../lib/zerodhaXLSXParser'
 import type { ZerodhaParseResult } from '../lib/zerodhaXLSXParser'
 import { useApp } from '../context/AppContext'
 import { fmtINR } from '../lib/calc'
@@ -28,7 +28,7 @@ const TABS = [
 
 // ─── Zerodha XLSX import tab ──────────────────────────────────────────────────
 function ZerodhaTab() {
-  const { addHolding } = useApp()
+  const { addHolding, addOrUpdateSnapshot } = useApp()
   const fileRef   = useRef<HTMLInputElement>(null)
   const [parsing,  setParsing]  = useState(false)
   const [progress, setProgress] = useState({ done: 0, total: 0 })
@@ -49,6 +49,7 @@ function ZerodhaTab() {
   function doImport() {
     if (!result) return
     zerodhaToHoldings(result).forEach(h => addHolding(h))
+    addOrUpdateSnapshot(zerodhaToSnapshot(result))   // ← updates net worth
     setImported(true)
   }
 

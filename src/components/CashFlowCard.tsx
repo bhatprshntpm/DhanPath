@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { Plus, ChevronDown, ChevronUp, Search, X } from 'lucide-react'
+import { Plus, ChevronDown, ChevronUp, Search, X, Trash2 } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, Cell } from 'recharts'
 import { useApp } from '../context/AppContext'
 import { monthlyCashFlow, fmtINR } from '../lib/calc'
@@ -18,7 +18,7 @@ function monthLabel(yyyyMM: string): string {
 }
 
 export default function CashFlowCard() {
-  const { data, addTransaction } = useApp()
+  const { data, addTransaction, deleteTransaction } = useApp()
   const [expanded, setExpanded] = useState(false)
   const [form, setForm] = useState({ date: '', amount: '', category: 'Food', type: 'expense' as 'income'|'expense', note: '' })
 
@@ -263,7 +263,7 @@ export default function CashFlowCard() {
               ) : (
                 <div className="flex flex-col divide-y divide-surface-50">
                   {paginated.map(t => (
-                    <div key={t.id} className="flex items-center justify-between py-2 gap-3">
+                    <div key={t.id} className="flex items-center justify-between py-2 gap-3 group">
                       <div className="flex items-center gap-2.5 min-w-0">
                         <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${t.type === 'income' ? 'bg-emerald-500' : 'bg-rose-400'}`}/>
                         <div className="min-w-0">
@@ -274,9 +274,15 @@ export default function CashFlowCard() {
                           {t.note && <p className="text-[10px] text-surface-400 truncate mt-0.5">{t.note}</p>}
                         </div>
                       </div>
-                      <span className={`text-xs font-bold shrink-0 ${t.type === 'income' ? 'text-emerald-600' : 'text-rose-500'}`}>
-                        {t.type === 'income' ? '+' : '−'}{fmtINR(t.amount)}
-                      </span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className={`text-xs font-bold ${t.type === 'income' ? 'text-emerald-600' : 'text-rose-500'}`}>
+                          {t.type === 'income' ? '+' : '−'}{fmtINR(t.amount)}
+                        </span>
+                        <button onClick={() => deleteTransaction(t.id)}
+                          className="opacity-0 group-hover:opacity-100 text-surface-300 hover:text-rose-400 transition-all">
+                          <Trash2 size={11}/>
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>

@@ -5,7 +5,7 @@ import { calcHealthScore, HEALTH_LABELS } from '../lib/healthScore'
 import { fmtINR } from '../lib/calc'
 import { parseCASPDF, casResultToHoldings, casResultToTransactions, casResultToSnapshot } from '../lib/casParser'
 import { parseBankCSV, bankTxnsToAppTransactions } from '../lib/bankCSVParser'
-import { parseEquityCSV, equityHoldingsToAppHoldings, equityTradesToAppTransactions } from '../lib/equityCSVParser'
+import { parseZerodhaXLSX, zerodhaToHoldings, zerodhaToSnapshot } from '../lib/zerodhaXLSXParser'
 import { parseEPFPDF, epfToSnapshot, epfToTransactions } from '../lib/epfParser'
 
 const ONBOARDING_KEY = 'dhanpath-onboarded'
@@ -137,7 +137,7 @@ function ScoreReveal({ onDone }: { onDone: () => void }) {
 }
 
 export default function OnboardingWizard({ forceOpen, onClose }: { forceOpen?: boolean; onClose?: () => void } = {}) {
-  const { data, updateSettings, updateScenario, addHolding, addTransaction, addSnapshot } = useApp()
+  const { data, updateSettings, updateScenario, addHolding, addTransaction, addSnapshot, addOrUpdateSnapshot } = useApp()
   const [open, setOpen]         = useState(() => !localStorage.getItem(ONBOARDING_KEY))
   const [step, setStep]         = useState(0)
   const [showScore, setShowScore] = useState(false)
@@ -192,10 +192,9 @@ export default function OnboardingWizard({ forceOpen, onClose }: { forceOpen?: b
     if (!file) { setKiteZone({ ...EMPTY_ZONE }); return }
     setKiteZone(z => ({ ...z, file, status: 'parsing', summary: '' }))
     try {
-      const text = await file.text()
-      const r    = parseEquityCSV(text)
+      const r = await parseZerodhaXLSX(file)
       if (r.status === 'success') {
-        setKiteZone({ file, status: 'done', summary: `${r.holdings.length} holdings · ${fmtINR(r.totalValue)} · ${r.broker}`, data: r })
+        setKiteZone({ file, status: 'done', summary: `${r.holdings.length} holdings · ${fmtINR(r.summary.totalValue)} · Zerodha`, data: r })
       } else {
         setKiteZone({ file, status: 'error', summary: r.message, data: null })
       }
@@ -246,8 +245,8 @@ export default function OnboardingWizard({ forceOpen, onClose }: { forceOpen?: b
       addSnapshot(casResultToSnapshot(casZone.data))
     }
     if (kiteZone.data?.status === 'success') {
-      equityHoldingsToAppHoldings(kiteZone.data.holdings).forEach((h: any) => addHolding(h))
-      equityTradesToAppTransactions(kiteZone.data.transactions).forEach((t: any) => addTransaction(t))
+      zerodhaToHoldings(kiteZone.data).forEach((h: any) => addHolding(h))
+      addOrUpdateSnapshot(zerodhaToSnapshot(kiteZone.data))
     }
     if (epfZone.data?.status === 'success') {
       addSnapshot(epfToSnapshot(epfZone.data))
@@ -366,9 +365,9 @@ export default function OnboardingWizard({ forceOpen, onClose }: { forceOpen?: b
                     onPassword={p => { setCasPass(p); if (casZone.file) handleCAS(casZone.file, p) }}
                   />
                   <FileDropZone
-                    label="Equity Holdings"
-                    hint="Zerodha, Groww, Angel One, Upstox — CSV export from your broker's portfolio page"
-                    accept=".csv"
+                    label="Zerodha Holdings (XLSX)"
+                    hint="Download from Zerodha Console → Portfolio → Holdings → Download Excel"
+                    accept=".xlsx,.xls"
                     state={kiteZone}
                     onFile={handleKite}
                   />

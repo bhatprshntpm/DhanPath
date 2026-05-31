@@ -9,9 +9,10 @@ import { nanoid } from '../lib/nanoid'
 interface AppContextValue {
   data:        AppData
   loading:     boolean
-  addSnapshot:    (s: Omit<NetWorthSnapshot, 'id'>) => void
-  addTransaction: (t: Omit<Transaction, 'id'>)      => void
-  deleteTransaction: (id: string)                   => void
+  addSnapshot:          (s: Omit<NetWorthSnapshot, 'id'>) => void
+  addOrUpdateSnapshot:  (s: Omit<NetWorthSnapshot, 'id'>) => void
+  addTransaction:    (t: Omit<Transaction, 'id'>)      => void
+  deleteTransaction: (id: string)                      => void
   addHolding:     (h: Omit<Holding, 'id'>)          => void
   deleteHolding:  (id: string)                       => void
   addDebt:        (d: Omit<Debt, 'id'>)             => void
@@ -55,6 +56,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const addSnapshot       = (s: Omit<NetWorthSnapshot, 'id'>) =>
     update({ ...get(), snapshots: [...get().snapshots, { ...s, id: nanoid() }] })
+
+  // Update existing snapshot for same month, or add new one
+  const addOrUpdateSnapshot = (s: Omit<NetWorthSnapshot, 'id'>) => {
+    const existing = get().snapshots.find(x => x.date === s.date)
+    if (existing) {
+      // Merge: add portfolio values on top of existing (don't overwrite manual entries)
+      const merged: NetWorthSnapshot = {
+        ...existing,
+        assets: {
+          checking:   existing.assets.checking,
+          savings:    existing.assets.savings   + (s.assets.savings   || 0),
+          brokerage:  s.assets.brokerage > 0 ? s.assets.brokerage : existing.assets.brokerage,
+          retirement: s.assets.retirement > 0 ? s.assets.retirement : existing.assets.retirement,
+          realEstate: existing.assets.realEstate,
+          other:      existing.assets.other     + (s.assets.other     || 0),
+        },
+      }
+      update({ ...get(), snapshots: get().snapshots.map(x => x.id === existing.id ? merged : x) })
+    } else {
+      update({ ...get(), snapshots: [...get().snapshots, { ...s, id: nanoid() }] })
+    }
+  }
 
   const addTransaction    = (t: Omit<Transaction, 'id'>) =>
     update({ ...get(), transactions: [...get().transactions, { ...t, id: nanoid() }] })
@@ -103,7 +126,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   return (
     <AppContext.Provider value={{
       data, loading,
-      addSnapshot, addTransaction, deleteTransaction,
+      addSnapshot, addOrUpdateSnapshot,
+      addTransaction, deleteTransaction,
       addHolding, deleteHolding,
       addDebt, updateDebt, deleteDebt,
       addGoal, updateGoal, deleteGoal,

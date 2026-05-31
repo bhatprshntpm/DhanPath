@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChevronDown, ChevronUp, Plus } from 'lucide-react'
+import { ChevronDown, ChevronUp, Plus, Trash2 } from 'lucide-react'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
 import { useApp } from '../context/AppContext'
 import { fmtINR, fmtPct } from '../lib/calc'
@@ -24,7 +24,7 @@ const ASSET_COLORS: Record<string, string> = {
 interface AssetClass { name: string; value: number; color: string }
 
 export default function AssetAllocationCard() {
-  const { data, addHolding } = useApp()
+  const { data, addHolding, deleteHolding } = useApp()
   const [expanded, setExpanded] = useState(false)
   const [form, setForm] = useState({ name: '', ticker: '', type: 'etf' as const, value: '', costBasis: '' })
 
@@ -32,39 +32,42 @@ export default function AssetAllocationCard() {
     ? [...data.snapshots].sort((a, b) => a.date.localeCompare(b.date)).at(-1)
     : null
 
-  // Build asset class buckets
+  const hasHoldings = data.holdings.length > 0
+
+  // Build buckets — holdings are the primary source (specific)
+  // Snapshot supplements only assets NOT covered by holdings (cash, real estate)
   const buckets: Record<string, number> = {}
 
-  // From net worth snapshot
-  if (latest) {
+  if (hasHoldings) {
+    // Holdings give us the detailed breakdown
+    for (const h of data.holdings) {
+      const cat =
+        h.type === 'stock'      ? 'Direct Equity'     :
+        h.type === 'etf'        ? 'Mutual Funds & ETFs':
+        h.type === 'bond'       ? 'Fixed Income / Debt':
+        h.type === 'retirement' ? 'EPF / NPS / PPF'   :
+        h.type === 'crypto'     ? 'Crypto'             :
+        h.type === 'cash'       ? 'Cash & Deposits'    : 'Other'
+      buckets[cat] = (buckets[cat] ?? 0) + h.value
+    }
+    // Add cash, real estate from snapshot (NOT in holdings)
+    if (latest) {
+      if (latest.assets.checking + latest.assets.savings > 0)
+        buckets['Cash & Deposits'] = (buckets['Cash & Deposits'] ?? 0) + latest.assets.checking + latest.assets.savings
+      if (latest.assets.realEstate > 0)
+        buckets['Real Estate'] = (buckets['Real Estate'] ?? 0) + latest.assets.realEstate
+    }
+  } else if (latest) {
+    // No holdings — fall back to snapshot buckets
     const a = latest.assets
-    if (a.checking + a.savings > 0)  buckets['Cash & Deposits']  = (buckets['Cash & Deposits']  ?? 0) + a.checking + a.savings
-    if (a.brokerage > 0)              buckets['Mutual Funds & Stocks'] = (buckets['Mutual Funds & Stocks'] ?? 0) + a.brokerage
-    if (a.retirement > 0)             buckets['EPF / NPS / PPF']  = (buckets['EPF / NPS / PPF']  ?? 0) + a.retirement
-    if (a.realEstate > 0)             buckets['Real Estate']       = (buckets['Real Estate']       ?? 0) + a.realEstate
-    if (a.other > 0)                  buckets['Gold & Other']      = (buckets['Gold & Other']      ?? 0) + a.other
-    if (a.other > 0)                    buckets['Other']       = (buckets['Other']       ?? 0) + a.other
+    if (a.checking + a.savings > 0) buckets['Cash & Deposits']   = a.checking + a.savings
+    if (a.brokerage > 0)            buckets['Mutual Funds & ETFs']= a.brokerage
+    if (a.retirement > 0)           buckets['EPF / NPS / PPF']   = a.retirement
+    if (a.realEstate > 0)           buckets['Real Estate']        = a.realEstate
+    if (a.other > 0)                buckets['Gold & Other']       = a.other
   }
 
-  // From individual holdings (more specific, override buckets where possible)
-  const holdingBuckets: Record<string, number> = {}
-  for (const h of data.holdings) {
-    const cat =
-      h.type === 'stock'      ? 'Equity'       :
-      h.type === 'etf'        ? 'Mutual Funds'  :
-      h.type === 'bond'       ? 'Fixed Income'  :
-      h.type === 'retirement' ? 'Retirement'    :
-      h.type === 'crypto'     ? 'Crypto'        :
-      h.type === 'cash'       ? 'Cash'          : 'Other'
-    holdingBuckets[cat] = (holdingBuckets[cat] ?? 0) + h.value
-  }
-
-  // Use holdings if we have them, else net worth snapshot
-  const finalBuckets = Object.keys(holdingBuckets).length > 0
-    ? { ...buckets, ...holdingBuckets }  // holdings override snapshot categories
-    : buckets
-
-  const classes: AssetClass[] = Object.entries(finalBuckets)
+  const classes: AssetClass[] = Object.entries(buckets)
     .filter(([, v]) => v > 0)
     .sort(([, a], [, b]) => b - a)
     .map(([name, value]) => ({ name, value, color: ASSET_COLORS[name] ?? '#d6d3d1' }))
@@ -175,16 +178,22 @@ export default function AssetAllocationCard() {
           {data.holdings.length > 0 && (
             <div className="max-h-48 overflow-y-auto flex flex-col gap-1">
               {data.holdings.map(h => (
-                <div key={h.id} className="flex justify-between items-center text-xs py-1.5 border-b border-surface-50">
-                  <div>
-                    <span className="font-medium text-surface-800">{h.name}</span>
-                    {h.ticker && <span className="text-surface-300 ml-1 font-mono text-[10px]">{h.ticker}</span>}
+                <div key={h.id} className="flex justify-between items-center text-xs py-1.5 border-b border-surface-50 group">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="font-medium text-surface-800 truncate">{h.name}</span>
+                    {h.ticker && <span className="text-surface-300 font-mono text-[10px] shrink-0">{h.ticker}</span>}
                   </div>
-                  <div className="text-right">
-                    <div className="font-medium text-surface-800">{fmtINR(h.value)}</div>
-                    <div className={`text-[10px] ${h.value >= h.costBasis ? 'text-emerald-600' : 'text-rose-500'}`}>
-                      {fmtPct(((h.value - h.costBasis) / Math.max(h.costBasis, 1)) * 100)}
+                  <div className="flex items-center gap-2 shrink-0">
+                    <div className="text-right">
+                      <div className="font-medium text-surface-800">{fmtINR(h.value)}</div>
+                      <div className={`text-[10px] ${h.value >= h.costBasis ? 'text-emerald-600' : 'text-rose-500'}`}>
+                        {fmtPct(((h.value - h.costBasis) / Math.max(h.costBasis, 1)) * 100)}
+                      </div>
                     </div>
+                    <button onClick={() => deleteHolding(h.id)}
+                      className="opacity-0 group-hover:opacity-100 text-surface-300 hover:text-rose-400 transition-all ml-1">
+                      <Trash2 size={12}/>
+                    </button>
                   </div>
                 </div>
               ))}
