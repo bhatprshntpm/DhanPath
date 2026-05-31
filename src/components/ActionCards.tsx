@@ -129,7 +129,7 @@ function useActionCards(): ActionCard[] {
       title: 'Add your life goals',
       body: 'Add goals like home, education, or car. They appear as pins on your Lifetime Timeline and affect your projections.',
       cta: 'Add goals →',
-      section: 'section-goals',
+      section: 'section-goals-view',
       expand: 'goals',
     })
   }
@@ -182,7 +182,7 @@ const PRIORITY_CONFIG = {
   insight: { bg: 'bg-amber-50',  border: 'border-amber-200',  badge: 'bg-amber-100 text-amber-700',  label: 'Insight'        },
 }
 
-export default function ActionCards() {
+export default function ActionCards({ onNavigate }: { onNavigate?: (id: string) => void } = {}) {
   const cards = useActionCards()
   if (!cards.length) return null
 
@@ -202,7 +202,7 @@ export default function ActionCards() {
               <p className="text-sm font-semibold text-surface-800">{c.title}</p>
               <p className="text-xs text-surface-600 leading-relaxed">{c.body}</p>
               <button
-                onClick={() => scrollTo(c.section, c.expand)}
+                onClick={() => (onNavigate ?? scrollTo)(c.section, c.expand)}
                 className="mt-1 text-xs font-semibold text-amber-600 hover:text-amber-700 text-left transition-colors underline-offset-2 hover:underline">
                 {c.cta}
               </button>
