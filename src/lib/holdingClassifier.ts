@@ -68,10 +68,15 @@ const SEBI_CATEGORY_MAP: Record<string, { assetClass: AssetClass; subType: strin
   'Debt - Floater':                   { assetClass: 'Debt', subType: 'Floater' },
 
   // Others (index/ETF/FoF from Zerodha's Instrument Type labels)
-  'Others - Index Funds/ETFs':        { assetClass: 'Equity', subType: 'Index ETF' },
-  'Others - Fund of Funds':           { assetClass: 'International',      subType: 'International Fund' },
-  'Others - Fund of Funds (Domestic)':{ assetClass: 'Equity', subType: 'Fund of Funds (Domestic)' },
-  'Others - ETF':                     { assetClass: 'Equity', subType: 'Index ETF' },
+  'Others - Index Funds/ETFs':        { assetClass: 'Equity',        subType: 'Index ETF' },
+  'Others - Fund of Funds':           { assetClass: 'International', subType: 'International Fund' },
+  'Others - Fund of Funds (Domestic)':{ assetClass: 'Equity',        subType: 'Fund of Funds (Domestic)' },
+  'Others - ETF':                     { assetClass: 'Equity',        subType: 'Index ETF' },
+  // Gold & commodity explicit SEBI categories (Zerodha sometimes uses these)
+  'Other - Gold':                     { assetClass: 'Gold',          subType: 'Gold Fund' },
+  'Others - Gold':                    { assetClass: 'Gold',          subType: 'Gold Fund' },
+  'Commodity - Gold':                 { assetClass: 'Gold',          subType: 'Gold Fund' },
+  'Other - Silver':                   { assetClass: 'Gold',          subType: 'Silver Fund' },
 }
 
 export function classifyBySebiCategory(instrumentType: string): { assetClass: AssetClass; subType: string } | null {
@@ -268,6 +273,20 @@ export async function classifyHolding(
 
   if (isinType === 'g_sec') return { assetClass: 'Debt',  subType: 'Government Securities', source: 'isin-prefix' }
   if (isinType === 'sgb')   return { assetClass: 'Gold',  subType: 'Sovereign Gold Bond',   source: 'isin-prefix' }
+
+  // ── Layer 1.5: Name-pattern override for ambiguous SEBI categories ──────────
+  // FoF (domestic) can be Gold, Silver, or International — SEBI lumps them together.
+  // Disambiguate by fund name before SEBI lookup runs.
+  const nameLower = name.toLowerCase()
+  const isFoF = /fund.of.fund|fof/i.test(instrumentType)
+  if (isFoF || isinType === 'mutual_fund') {
+    if (/\bgold\b/i.test(name))
+      return { assetClass: 'Gold',          subType: 'Gold Fund',          source: 'name-pattern' }
+    if (/\bsilver\b/i.test(name))
+      return { assetClass: 'Gold',          subType: 'Silver Fund',        source: 'name-pattern' }
+    if (isFoF && /international|overseas|us equity|nasdaq|s&p 500|global|world|foreign/i.test(nameLower))
+      return { assetClass: 'International', subType: 'International Fund', source: 'name-pattern' }
+  }
 
   // ── Layer 2: SEBI category (from Zerodha Instrument Type column) ──────────
   if (instrumentType && instrumentType !== '-') {
