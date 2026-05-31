@@ -51,11 +51,18 @@ export default function HeroSection() {
 
   // Sparkline data — last 12 months from snapshots or monthly cashflow
   const sparkData = useMemo(() => {
+    const thisMonth = new Date().toISOString().slice(0, 7)
     if (sorted.length >= 2) {
-      return sorted.slice(-12).map(s => ({
+      const points = sorted.slice(-12).map(s => ({
         label: shortMonth(s.date),
-        value: netWorth(s),
+        value: s.date === thisMonth ? nwNow : netWorth(s),
       }))
+      // Replace or append current month using live nwNow
+      const lastPoint = points[points.length - 1]
+      if (lastPoint?.label !== shortMonth(thisMonth)) {
+        points.push({ label: shortMonth(thisMonth), value: nwNow })
+      }
+      return points
     }
     // Fall back to cumulative cashflow
     const points = []
@@ -68,7 +75,7 @@ export default function HeroSection() {
       points.push({ label: shortMonth(month), value: running > 0 ? running : 0 })
     }
     return points
-  }, [sorted, transactions])
+  }, [sorted, transactions, nwNow])
 
   // Key stats
   const hs       = useMemo(() => calcHealthScore(data), [data])
@@ -93,7 +100,7 @@ export default function HeroSection() {
           <p className="text-4xl sm:text-5xl font-bold tracking-tight text-surface-900">
             {fmtINR(nwNow)}
           </p>
-          {(momChange !== 0 || nwPrev > 0) && (
+          {nwPrev > 0 && (
             <div className="flex items-center gap-3 mt-2 flex-wrap">
               <span className={`flex items-center gap-1 text-sm font-semibold ${isUp ? 'text-emerald-600' : 'text-rose-500'}`}>
                 {isUp ? <TrendingUp size={14}/> : <TrendingDown size={14}/>}

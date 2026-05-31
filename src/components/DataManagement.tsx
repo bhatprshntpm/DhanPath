@@ -3,9 +3,7 @@ import { ChevronDown, ChevronUp, Database, Upload, CheckCircle, Loader2, X, Refr
 import ImportCard from './ImportCard'
 import NetWorthCard from './NetWorthCard'
 import CashFlowCard from './CashFlowCard'
-import AssetAllocationCard from './AssetAllocationCard'
 import DebtCard from './DebtCard'
-import GoalsCard from './GoalsCard'
 import SipCalculator from './SipCalculator'
 import ScenarioPanel from './ScenarioPanel'
 import PortfolioBreakdown from './PortfolioBreakdown'
@@ -20,16 +18,14 @@ const TABS = [
   { id: 'import',     label: 'Other Sources'    },
   { id: 'networth',   label: 'Net Worth'        },
   { id: 'cashflow',   label: 'Transactions'     },
-  { id: 'portfolio',  label: 'Portfolio'        },
   { id: 'debt',       label: 'Loans'            },
-  { id: 'goals',      label: 'Goals'            },
   { id: 'scenarios',  label: 'Scenarios'        },
   { id: 'sip',        label: 'SIP Calculator'   },
 ]
 
 // ─── Zerodha XLSX import tab ──────────────────────────────────────────────────
 function ZerodhaTab() {
-  const { addHolding, addOrUpdateSnapshot } = useApp()
+  const { replaceHoldings, addOrUpdateSnapshot } = useApp()
   const fileRef   = useRef<HTMLInputElement>(null)
   const [parsing,  setParsing]  = useState(false)
   const [progress, setProgress] = useState({ done: 0, total: 0 })
@@ -49,8 +45,8 @@ function ZerodhaTab() {
 
   function doImport() {
     if (!result) return
-    zerodhaToHoldings(result).forEach(h => addHolding(h))
-    addOrUpdateSnapshot(zerodhaToSnapshot(result))   // ← updates net worth
+    replaceHoldings(zerodhaToHoldings(result))
+    addOrUpdateSnapshot(zerodhaToSnapshot(result))
     setImported(true)
   }
 
@@ -225,9 +221,7 @@ export default function DataManagement() {
             {activeTab === 'import'    && <section id="section-import"><ImportCard /></section>}
             {activeTab === 'networth'  && <section id="section-networth"><NetWorthCard /></section>}
             {activeTab === 'cashflow'  && <section id="section-cashflow"><CashFlowCard /></section>}
-            {activeTab === 'portfolio' && <section id="section-portfolio"><AssetAllocationCard /></section>}
             {activeTab === 'debt'      && <section id="section-debt"><DebtCard /></section>}
-            {activeTab === 'goals'     && <section id="section-goals"><GoalsCard /></section>}
             {activeTab === 'scenarios' && <section id="section-scenarios"><ScenarioPanel /></section>}
             {activeTab === 'sip'       && <SipCalculator />}
           </div>

@@ -70,8 +70,8 @@ export default function AssetAllocationCard() {
       buckets[cat] = (buckets[cat] ?? 0) + h.value
     }
     if (latest) {
-      if (latest.assets.checking > 0)
-        buckets['Cash'] = (buckets['Cash'] ?? 0) + latest.assets.checking
+      if (latest.assets.checking + latest.assets.savings > 0)
+        buckets['Cash'] = (buckets['Cash'] ?? 0) + latest.assets.checking + latest.assets.savings
       if (latest.assets.realEstate > 0)
         buckets['Real Estate'] = (buckets['Real Estate'] ?? 0) + latest.assets.realEstate
     }

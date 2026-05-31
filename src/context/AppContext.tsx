@@ -13,8 +13,9 @@ interface AppContextValue {
   addOrUpdateSnapshot:  (s: Omit<NetWorthSnapshot, 'id'>) => void
   addTransaction:    (t: Omit<Transaction, 'id'>)      => void
   deleteTransaction: (id: string)                      => void
-  addHolding:     (h: Omit<Holding, 'id'>)          => void
-  deleteHolding:  (id: string)                       => void
+  addHolding:        (h: Omit<Holding, 'id'>)        => void
+  replaceHoldings:   (hs: Omit<Holding, 'id'>[])      => void
+  deleteHolding:     (id: string)                     => void
   addDebt:        (d: Omit<Debt, 'id'>)             => void
   updateDebt:     (d: Debt)                          => void
   deleteDebt:     (id: string)                       => void
@@ -88,6 +89,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const addHolding        = (h: Omit<Holding, 'id'>) =>
     update({ ...get(), holdings: [...get().holdings, { ...h, id: nanoid() }] })
 
+  const replaceHoldings   = (hs: Omit<Holding, 'id'>[]) =>
+    update({ ...get(), holdings: hs.map(h => ({ ...h, id: nanoid() })) })
+
   const deleteHolding     = (id: string) =>
     update({ ...get(), holdings: get().holdings.filter(x => x.id !== id) })
 
@@ -128,7 +132,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       data, loading,
       addSnapshot, addOrUpdateSnapshot,
       addTransaction, deleteTransaction,
-      addHolding, deleteHolding,
+      addHolding, replaceHoldings, deleteHolding,
       addDebt, updateDebt, deleteDebt,
       addGoal, updateGoal, deleteGoal,
       addScenario, updateScenario, deleteScenario,
