@@ -147,10 +147,21 @@ export async function parseZerodhaXLSX(file: File): Promise<ZerodhaParseResult> 
 
 // ─── Row parsers ──────────────────────────────────────────────────────────────
 
-function findHeaderRow(rows: any[][], symbolColGuess = 1): number {
+// Build column index map from header row — position-independent
+function colMap(headerRow: any[]): Record<string, number> {
+  const map: Record<string, number> = {}
+  headerRow.forEach((cell, idx) => {
+    if (cell != null) map[String(cell).trim()] = idx
+  })
+  return map
+}
+
+function findHeaderRow(rows: any[][]): number {
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i]
-    if (row && row[symbolColGuess] === 'Symbol') return i
+    if (!row) continue
+    // Symbol column can be at any position — scan entire row
+    if (row.some(c => c === 'Symbol')) return i
   }
   return -1
 }
@@ -164,26 +175,27 @@ function parseCombinedRows(rows: any[][], out: ZerodhaHolding[]) {
   const headerIdx = findHeaderRow(rows)
   if (headerIdx === -1) return
 
-  // Combined cols: [null, Symbol, ISIN, Sector, InstrumentType, QtyAvail, QtyDisc, QtyLT, QtyPledgeM, QtyPledgeL, AvgPrice, ClosingPrice, PL, PLPct]
+  const cm = colMap(rows[headerIdx])
+  const S = cm['Symbol'], IS = cm['ISIN'], SEC = cm['Sector'], IT = cm['Instrument Type']
+  const QA = cm['Quantity Available'], AP = cm['Average Price']
+  const CP = cm['Previous Closing Price'], PL = cm['Unrealized P&L'], PP = cm['Unrealize P&L Pct.']
+
   for (let i = headerIdx + 1; i < rows.length; i++) {
     const row = rows[i]
-    if (!row || !row[1]) continue
-    const symbol   = String(row[1]).trim()
-    const isin     = String(row[2] ?? '').trim()
-    const sector   = String(row[3] ?? '').trim()
-    const instType = String(row[4] ?? '').trim()
-    const qty      = n(row[5])
-    const avgPrice = n(row[10])
-    const curPrice = n(row[11])
-    const pnl      = n(row[12])
-    const pnlPct   = n(row[13])
+    if (!row || row[S] == null || row[S] === '') continue
+    const symbol   = String(row[S]).trim()
+    const isin     = String(row[IS] ?? '').trim()
+    const sector   = String(row[SEC] ?? '').trim()
+    const instType = String(row[IT] ?? '').trim()
+    const qty      = n(row[QA])
+    const avgPrice = n(row[AP])
+    const curPrice = n(row[CP])
+    const pnl      = n(row[PL])
+    const pnlPct   = n(row[PP])
 
     if (!qty || !curPrice) continue
 
-    const currentValue = qty * curPrice
-    const costBasis    = qty * avgPrice
-
-    const isMF  = instType !== '-' && instType !== ''
+    const isMF  = instType && instType !== '-' && instType !== ''
     const { assetClass, subType, isETF } = isMF
       ? { ...classifyMF(instType, symbol), isETF: false }
       : classifyEquity(sector, symbol)
@@ -191,11 +203,11 @@ function parseCombinedRows(rows: any[][], out: ZerodhaHolding[]) {
     out.push({
       symbol, isin, sector: isMF ? instType : sector,
       qty, avgPrice, currentPrice: curPrice,
-      currentValue, costBasis,
+      currentValue: qty * curPrice, costBasis: qty * avgPrice,
       unrealisedPL: pnl, unrealisedPLPct: pnlPct,
       assetClass, subType,
       isEquity: !isMF && assetClass === 'Direct Equity',
-      isMF, isETF: isETF || (isMF && assetClass === 'Index Funds & ETFs'),
+      isMF: !!isMF, isETF: isETF || (!!isMF && assetClass === 'Index Funds & ETFs'),
     })
   }
 }
@@ -203,18 +215,23 @@ function parseCombinedRows(rows: any[][], out: ZerodhaHolding[]) {
 function parseEquityRows(rows: any[][], out: ZerodhaHolding[]) {
   const headerIdx = findHeaderRow(rows)
   if (headerIdx === -1) return
-  // Equity cols: [null, Symbol, ISIN, Sector, QtyAvail, QtyDisc, QtyLT, QtyPledgeM, QtyPledgeL, AvgPrice, ClosingPrice, PL, PLPct]
+
+  const cm = colMap(rows[headerIdx])
+  const S = cm['Symbol'], IS = cm['ISIN'], SEC = cm['Sector']
+  const QA = cm['Quantity Available'], AP = cm['Average Price']
+  const CP = cm['Previous Closing Price'], PL = cm['Unrealized P&L'], PP = cm['Unrealized P&L Pct.']
+
   for (let i = headerIdx + 1; i < rows.length; i++) {
     const row = rows[i]
-    if (!row || !row[1]) continue
-    const symbol = String(row[1]).trim()
-    const isin   = String(row[2] ?? '').trim()
-    const sector = String(row[3] ?? '').trim()
-    const qty    = n(row[4])
-    const avg    = n(row[9])
-    const cur    = n(row[10])
-    const pnl    = n(row[11])
-    const pct    = n(row[12])
+    if (!row || row[S] == null || row[S] === '') continue
+    const symbol = String(row[S]).trim()
+    const isin   = String(row[IS] ?? '').trim()
+    const sector = String(row[SEC] ?? '').trim()
+    const qty    = n(row[QA])
+    const avg    = n(row[AP])
+    const cur    = n(row[CP])
+    const pnl    = n(row[PL])
+    const pct    = n(row[PP])
     if (!qty || !cur) continue
     const { assetClass, subType, isETF } = classifyEquity(sector, symbol)
     out.push({
@@ -229,18 +246,23 @@ function parseEquityRows(rows: any[][], out: ZerodhaHolding[]) {
 function parseMFRows(rows: any[][], out: ZerodhaHolding[]) {
   const headerIdx = findHeaderRow(rows)
   if (headerIdx === -1) return
-  // MF cols: [null, Symbol, ISIN, InstrumentType, QtyAvail, QtyDisc, QtyPledgeM, QtyPledgeL, AvgPrice, ClosingPrice, PL, PLPct]
+
+  const cm = colMap(rows[headerIdx])
+  const S = cm['Symbol'], IS = cm['ISIN'], IT = cm['Instrument Type']
+  const QA = cm['Quantity Available'], AP = cm['Average Price']
+  const CP = cm['Previous Closing Price'], PL = cm['Unrealized P&L'], PP = cm['Unrealized P&L Pct.']
+
   for (let i = headerIdx + 1; i < rows.length; i++) {
     const row = rows[i]
-    if (!row || !row[1]) continue
-    const symbol   = String(row[1]).trim()
-    const isin     = String(row[2] ?? '').trim()
-    const instType = String(row[3] ?? '').trim()
-    const qty      = n(row[4])
-    const avg      = n(row[8])
-    const cur      = n(row[9])
-    const pnl      = n(row[10])
-    const pct      = n(row[11])
+    if (!row || row[S] == null || row[S] === '') continue
+    const symbol   = String(row[S]).trim()
+    const isin     = String(row[IS] ?? '').trim()
+    const instType = String(row[IT] ?? '').trim()
+    const qty      = n(row[QA])
+    const avg      = n(row[AP])
+    const cur      = n(row[CP])
+    const pnl      = n(row[PL])
+    const pct      = n(row[PP])
     if (!qty || !cur) continue
     const { assetClass, subType } = classifyMF(instType, symbol)
     out.push({
