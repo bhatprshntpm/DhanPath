@@ -20,7 +20,8 @@ const ASSET_COLORS: Record<string, string> = {
 
 const ALL_CLASSES = ['Equity', 'Debt', 'Gold', 'International', 'Cryptocurrency', 'Real Estate', 'Cash'] as const
 
-const CLASS_HINTS: Record<string, string> = {
+// Hints shown in empty state — used via CLASS_HINTS[name] when value === 0
+export const CLASS_HINTS: Record<string, string> = {
   'Equity':         'Stocks, mutual funds, ETFs — import Zerodha XLSX to populate',
   'Debt':           'G-Secs, debt mutual funds, bonds — import Zerodha or add manually',
   'Gold':           'Physical gold, Gold ETF, SGBs — add via portfolio or net worth',
