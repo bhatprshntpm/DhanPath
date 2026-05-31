@@ -142,9 +142,11 @@ export default function OnboardingWizard({ forceOpen, onClose }: { forceOpen?: b
   const [step, setStep]         = useState(0)
   const [showScore, setShowScore] = useState(false)
 
-  const [name, setName]         = useState('')
-  const [age, setAge]           = useState(28)
-  const [goal, setGoal]         = useState('')
+  const [name,          setName]          = useState(() => data.settings.name !== 'My Finances' ? data.settings.name : '')
+  const [age,           setAge]           = useState(() => data.settings.currentAge ?? 28)
+  const [retirementAge, setRetirementAge] = useState(() => data.settings.retirementAge ?? 55)
+  const [expenses,      setExpenses]      = useState(() => data.settings.monthlyExpenses ?? 60000)
+  const [goal,          setGoal]          = useState('')
 
   const [bankZone, setBankZone]   = useState<FileZoneState>({ ...EMPTY_ZONE })
   const [casZone,  setCasZone]    = useState<FileZoneState>({ ...EMPTY_ZONE })
@@ -222,7 +224,13 @@ export default function OnboardingWizard({ forceOpen, onClose }: { forceOpen?: b
   const anyParsing  = [bankZone, casZone, kiteZone, epfZone].some(z => z.status === 'parsing')
 
   function applyImports() {
-    updateSettings({ name: name || 'My Finances', currentAge: age, currency: 'INR' })
+    updateSettings({
+      name:           name || 'My Finances',
+      currentAge:     age,
+      retirementAge:  retirementAge,
+      monthlyExpenses: expenses,
+      currency:       'INR',
+    })
 
     const baseline = data.scenarios.find(s => s.id === 'baseline')
     if (baseline && bankZone.data?.transactions?.length) {
@@ -315,9 +323,19 @@ export default function OnboardingWizard({ forceOpen, onClose }: { forceOpen?: b
                         value={name} onChange={e => setName(e.target.value)} />
                     </div>
                     <div>
-                      <label className="text-xs font-semibold text-surface-400 uppercase tracking-widest block mb-1.5">Age</label>
+                      <label className="text-xs font-semibold text-surface-400 uppercase tracking-widest block mb-1.5">Current Age</label>
                       <input className="input-field" type="number" min={18} max={80}
                         value={age} onChange={e => setAge(parseInt(e.target.value) || 28)} />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-surface-400 uppercase tracking-widest block mb-1.5">Target Retirement Age</label>
+                      <input className="input-field" type="number" min={30} max={80}
+                        value={retirementAge} onChange={e => setRetirementAge(parseInt(e.target.value) || 55)} />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-surface-400 uppercase tracking-widest block mb-1.5">Monthly Expenses (₹)</label>
+                      <input className="input-field" type="number" min={1000}
+                        value={expenses} onChange={e => setExpenses(parseInt(e.target.value) || 60000)} />
                     </div>
                   </div>
 

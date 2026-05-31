@@ -51,7 +51,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const update = useCallback((next: AppData) => {
     latestData.current = next
     setData(next)
-    saveData(next)   // fire-and-forget async write
+    saveData(next).catch(err => console.error('[DhanPath] Save failed:', err))
   }, [])
 
   // Use ref-based data for all mutations so they never close over stale state
