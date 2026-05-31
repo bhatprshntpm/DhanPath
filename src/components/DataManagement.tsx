@@ -58,7 +58,7 @@ function ZerodhaTab() {
 
   function doClear() {
     if (!clearing) { setClearing(true); return }
-    replaceHoldings(data.holdings.filter(h => h.assetClass === 'International'))
+    replaceHoldings(data.holdings.filter(h => h.subType === 'US RSU / Stock'))
     setClearing(false)
     setResult(null)
     setImported(false)
@@ -192,7 +192,7 @@ function ZerodhaTab() {
 // ─── Fidelity PDF import tab ─────────────────────────────────────────────────
 function FidelityTab() {
   const { data, upsertHoldings, deleteHolding } = useApp()
-  const fidelityHoldings = data.holdings.filter(h => h.assetClass === 'International')
+  const fidelityHoldings = data.holdings.filter(h => h.subType === 'US RSU / Stock')
   const fileRef  = useRef<HTMLInputElement>(null)
   const [parsing,  setParsing]  = useState(false)
   const [result,   setResult]   = useState<FidelityParseResult | null>(null)
