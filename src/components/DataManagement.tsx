@@ -305,18 +305,36 @@ function FidelityTab() {
   )
 }
 
-// ─── Main accordion ───────────────────────────────────────────────────────────
+// ─── Main accordion ─────────────────────────────────────────────────────────────
+
+const RESET_SECTIONS = [
+  { key: 'holdings',     label: 'Holdings',     desc: 'Stocks, MFs, ETFs' },
+  { key: 'snapshots',    label: 'Net Worth',    desc: 'Monthly snapshots' },
+  { key: 'transactions', label: 'Transactions', desc: 'Income & expenses' },
+  { key: 'debts',        label: 'Loans',        desc: 'Loan entries' },
+  { key: 'goals',        label: 'Goals',        desc: 'Financial goals' },
+  { key: 'all',          label: 'Everything',   desc: 'Full reset incl. settings' },
+] as const
 
 export default function DataManagement() {
-  const [open,      setOpen]      = useState(false)
-  const [activeTab, setActiveTab] = useState('zerodha')
-  const [confirming, setConfirming] = useState(false)
-  const { replaceData } = useApp()
+  const [open,       setOpen]       = useState(false)
+  const [activeTab,  setActiveTab]  = useState('zerodha')
+  const [showReset,  setShowReset]  = useState(false)
+  const [pendingKey, setPendingKey] = useState<string | null>(null)
+  const { data, replaceData } = useApp()
 
-  function handleReset() {
-    if (!confirming) { setConfirming(true); return }
-    replaceData(DEFAULT_DATA)
-    setConfirming(false)
+  function confirmReset(key: string) {
+    if (pendingKey === key) {
+      if (key === 'all') {
+        replaceData(DEFAULT_DATA)
+      } else {
+        replaceData({ ...data, [key]: (DEFAULT_DATA as any)[key] })
+      }
+      setPendingKey(null)
+      setShowReset(false)
+    } else {
+      setPendingKey(key)
+    }
   }
 
   return (
@@ -334,17 +352,40 @@ export default function DataManagement() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {confirming && <span className="text-[11px] text-rose-500 font-medium">Click again to confirm</span>}
           <button
-            onClick={e => { e.stopPropagation(); handleReset() }}
-            onBlur={() => setConfirming(false)}
-            className={`text-[11px] px-2.5 py-1 rounded-lg border transition-colors
-              ${confirming ? 'border-rose-300 text-rose-600 bg-rose-50' : 'border-surface-200 text-surface-400 hover:text-rose-500 hover:border-rose-200'}`}>
-            Reset all data
+            onClick={e => { e.stopPropagation(); setShowReset(v => !v); setPendingKey(null) }}
+            className="text-[11px] px-2.5 py-1 rounded-lg border border-surface-200 text-surface-400 hover:text-rose-500 hover:border-rose-200 transition-colors">
+            Reset data
           </button>
           {open ? <ChevronUp size={16} className="text-surface-400" /> : <ChevronDown size={16} className="text-surface-400" />}
         </div>
       </button>
+
+      {showReset && (
+        <div className="border-t border-surface-100 px-5 py-4 bg-rose-50/40 animate-fade-up">
+          <p className="text-xs font-semibold text-surface-600 mb-3">Select what to reset — click once to arm, click again to confirm</p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {RESET_SECTIONS.map(s => {
+              const armed = pendingKey === s.key
+              return (
+                <button key={s.key} onClick={() => confirmReset(s.key)}
+                  onBlur={() => { if (pendingKey === s.key) setPendingKey(null) }}
+                  className={`flex flex-col items-start gap-0.5 px-3 py-2.5 rounded-xl border text-left transition-all
+                    ${armed
+                      ? 'border-rose-400 bg-rose-100 text-rose-700'
+                      : s.key === 'all'
+                        ? 'border-rose-200 text-rose-500 hover:bg-rose-50'
+                        : 'border-surface-200 text-surface-600 hover:border-rose-200 hover:text-rose-500'}`}>
+                  <span className="text-xs font-semibold">{armed ? 'Confirm reset' : s.label}</span>
+                  <span className="text-[10px] opacity-70">{s.desc}</span>
+                </button>
+              )
+            })}
+          </div>
+          <button onClick={() => { setShowReset(false); setPendingKey(null) }}
+            className="mt-3 text-[11px] text-surface-400 hover:text-surface-600">Cancel</button>
+        </div>
+      )}
 
       {open && (
         <div className="border-t border-surface-100 animate-fade-up">
