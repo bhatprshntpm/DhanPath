@@ -316,7 +316,11 @@ export default function AssetAllocationCard() {
                                   <div key={h.id} className="flex items-center gap-2 py-1.5 border-b border-surface-50 group">
                                     <div className="flex-1 min-w-0">
                                       <p className="text-xs font-medium text-surface-800 truncate">{h.name}</p>
-                                      {h.ticker && <p className="text-[10px] text-surface-300 font-mono truncate">{h.ticker}</p>}
+                                      <p className="text-[10px] text-surface-300 font-mono truncate">
+                                        {h.qty != null && h.qty > 0
+                                          ? `${h.qty % 1 === 0 ? h.qty : h.qty.toFixed(3)} units${h.lastPrice ? ` · ₹${h.lastPrice.toLocaleString('en-IN', { maximumFractionDigits: 0 })} each` : ''}`
+                                          : h.ticker || ''}
+                                      </p>
                                     </div>
                                     <div className="text-right shrink-0">
                                       <p className="text-xs font-semibold font-mono text-surface-800">{fmtINR(h.value)}</p>
