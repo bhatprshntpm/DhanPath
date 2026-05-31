@@ -12,6 +12,7 @@ import PortfolioBreakdown from './PortfolioBreakdown'
 import { parseZerodhaXLSX, zerodhaToHoldings, zerodhaToSnapshot } from '../lib/zerodhaXLSXParser'
 import type { ZerodhaParseResult } from '../lib/zerodhaXLSXParser'
 import { useApp } from '../context/AppContext'
+import { DEFAULT_DATA } from '../lib/storage'
 import { fmtINR } from '../lib/calc'
 
 const TABS = [
@@ -170,6 +171,14 @@ function ZerodhaTab() {
 export default function DataManagement() {
   const [open,      setOpen]      = useState(false)
   const [activeTab, setActiveTab] = useState('zerodha')
+  const [confirming, setConfirming] = useState(false)
+  const { replaceData } = useApp()
+
+  function handleReset() {
+    if (!confirming) { setConfirming(true); return }
+    replaceData(DEFAULT_DATA)
+    setConfirming(false)
+  }
 
   return (
     <div className="card overflow-hidden">
@@ -185,7 +194,17 @@ export default function DataManagement() {
             <p className="text-xs text-surface-400">Import statements, add snapshots, track loans and goals</p>
           </div>
         </div>
-        {open ? <ChevronUp size={16} className="text-surface-400" /> : <ChevronDown size={16} className="text-surface-400" />}
+        <div className="flex items-center gap-2">
+          {confirming && <span className="text-[11px] text-rose-500 font-medium">Click again to confirm</span>}
+          <button
+            onClick={e => { e.stopPropagation(); handleReset() }}
+            onBlur={() => setConfirming(false)}
+            className={`text-[11px] px-2.5 py-1 rounded-lg border transition-colors
+              ${confirming ? 'border-rose-300 text-rose-600 bg-rose-50' : 'border-surface-200 text-surface-400 hover:text-rose-500 hover:border-rose-200'}`}>
+            Reset all data
+          </button>
+          {open ? <ChevronUp size={16} className="text-surface-400" /> : <ChevronDown size={16} className="text-surface-400" />}
+        </div>
       </button>
 
       {open && (
