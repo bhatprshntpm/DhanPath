@@ -15,6 +15,7 @@ interface AppContextValue {
   deleteTransaction: (id: string)                      => void
   addHolding:        (h: Omit<Holding, 'id'>)        => void
   replaceHoldings:   (hs: Omit<Holding, 'id'>[])      => void
+  upsertHoldings:    (hs: Omit<Holding, 'id'>[])      => void
   updateHolding:     (id: string, patch: Partial<Holding>) => void
   deleteHolding:     (id: string)                     => void
   addDebt:        (d: Omit<Debt, 'id'>)             => void
@@ -93,6 +94,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const replaceHoldings   = (hs: Omit<Holding, 'id'>[]) =>
     update({ ...get(), holdings: hs.map(h => ({ ...h, id: nanoid() })) })
 
+  // Upsert by ticker — updates existing if ticker matches, adds if new
+  const upsertHoldings = (hs: Omit<Holding, 'id'>[]) => {
+    const current = [...get().holdings]
+    for (const h of hs) {
+      const idx = current.findIndex(x => x.ticker && x.ticker === h.ticker)
+      if (idx >= 0) {
+        current[idx] = { ...current[idx], ...h }
+      } else {
+        current.push({ ...h, id: nanoid() })
+      }
+    }
+    update({ ...get(), holdings: current })
+  }
+
   const updateHolding     = (id: string, patch: Partial<Holding>) =>
     update({ ...get(), holdings: get().holdings.map(h => h.id === id ? { ...h, ...patch } : h) })
 
@@ -136,7 +151,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       data, loading,
       addSnapshot, addOrUpdateSnapshot,
       addTransaction, deleteTransaction,
-      addHolding, replaceHoldings, updateHolding, deleteHolding,
+      addHolding, replaceHoldings, upsertHoldings, updateHolding, deleteHolding,
       addDebt, updateDebt, deleteDebt,
       addGoal, updateGoal, deleteGoal,
       addScenario, updateScenario, deleteScenario,

@@ -167,7 +167,7 @@ function ZerodhaTab() {
 
 // ─── Fidelity PDF import tab ─────────────────────────────────────────────────
 function FidelityTab() {
-  const { addHolding } = useApp()
+  const { upsertHoldings } = useApp()
   const fileRef  = useRef<HTMLInputElement>(null)
   const [parsing,  setParsing]  = useState(false)
   const [result,   setResult]   = useState<FidelityParseResult | null>(null)
@@ -191,7 +191,7 @@ function FidelityTab() {
 
   function doImport() {
     if (!result || !inrRate) return
-    fidelityToHoldings(result, inrRate).forEach(h => addHolding(h))
+    upsertHoldings(fidelityToHoldings(result, inrRate))
     setImported(true)
   }
 
