@@ -161,61 +161,15 @@ export async function parseFidelityPDF(file: File): Promise<FidelityParseResult>
       }
     }
 
-    // ── Pass 2: Parse Restricted Stock Units (unvested) ────────────────────────
-    // Find "Total Unvested Units X $price $value" line
-    // e.g. "Total Unvested Units 151 $150.82000 $22,773.82 151 $255.55000 $38,588.05"
-    const unvestedPattern = /Total Unvested Units/i
-    for (let i = 0; i < lines.length; i++) {
-      if (!unvestedPattern.test(lines[i])) continue
-
-      const nums = extractNumbers(lines[i])
-      // Format: qty(begin) price(begin) value(begin) qty(end) price(end) value(end)
-      // We want the END values (latest period)
-      if (nums.length >= 3) {
-        // Pair up: find qty×price≈value for the latest (end) figures
-        let qty = 0, priceUSD = 0, valueUSD = 0
-        for (let k = nums.length - 3; k >= 0; k--) {
-          const q = nums[k], p = nums[k + 1], v = nums[k + 2]
-          if (q > 0 && p > 0 && v > 0 && Math.abs(q * p - v) / v < 0.06) {
-            qty = q; priceUSD = p; valueUSD = v
-            break
-          }
-        }
-        if (valueUSD > 0) {
-          // Associate with first vested ticker found, or derive from context
-          const vestedTicker = holdings[0]?.ticker ?? 'RSU'
-          const vestedName   = holdings[0]?.name ?? 'Restricted Stock Units'
-          // Only add if not already present
-          if (!holdings.find(h => h.ticker === vestedTicker && h.unvested)) {
-            holdings.push({
-              name:         vestedName,
-              ticker:       vestedTicker,
-              qty,
-              priceUSD,
-              valueUSD,
-              costBasisUSD: 0,
-              gainUSD:      0,
-              unvested:     true,
-            })
-          }
-        }
-      }
-    }
-
     if (!holdings.length) {
       return { status: 'error', message: 'No holdings found. Make sure you upload the full quarterly statement PDF.', reportDate, holdings: [], totalUSD: 0 }
     }
 
     const totalUSD = holdings.reduce((a, h) => a + h.valueUSD, 0)
-    const vestedCount   = holdings.filter(h => !h.unvested).length
-    const unvestedCount = holdings.filter(h => h.unvested).length
-    const parts = []
-    if (vestedCount)   parts.push(`${vestedCount} vested holding${vestedCount > 1 ? 's' : ''}`)
-    if (unvestedCount) parts.push(`${unvestedCount} unvested RSU grant${unvestedCount > 1 ? 's' : ''}`)
-
     return {
       status:  'success',
-      message: `Found ${parts.join(' + ')} · $${totalUSD.toLocaleString('en-US', { maximumFractionDigits: 0 })} total`,
+      message: `Found ${holdings.length} holding${holdings.length > 1 ? 's' : ''} · $${totalUSD.toLocaleString('en-US', { maximumFractionDigits: 0 })} total`,
+      
       reportDate,
       holdings,
       totalUSD,
@@ -231,12 +185,11 @@ export function fidelityToHoldings(
   inrPerUsd: number,
 ): Omit<Holding, 'id'>[] {
   return parsed.holdings.map(h => ({
-    name:       h.name.split(' ').map(w => w[0] + w.slice(1).toLowerCase()).join(' ') +
-                (h.unvested ? ' (Unvested RSU)' : ''),
+    name:       h.name.split(' ').map(w => w[0] + w.slice(1).toLowerCase()).join(' '),
     ticker:     h.ticker,
     type:       'stock' as const,
     assetClass: 'International',
-    subType:    h.unvested ? 'Unvested RSU' : 'US RSU / Stock',
+    subType:    'US RSU / Stock',
     qty:        h.qty || undefined,
     avgPrice:   h.costBasisUSD > 0 && h.qty > 0 ? h.costBasisUSD / h.qty : undefined,
     lastPrice:  h.priceUSD || undefined,

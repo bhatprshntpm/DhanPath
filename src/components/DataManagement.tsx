@@ -261,18 +261,15 @@ function FidelityTab() {
             {result.holdings.map((h, idx) => (
               <div key={`${h.ticker}-${idx}`} className="flex items-center gap-3 px-4 py-3">
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-semibold text-surface-800">{h.name.split(' ').map((w: string) => w[0] + w.slice(1).toLowerCase()).join(' ')}</p>
-                    {h.unvested && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 font-semibold shrink-0">Unvested</span>}
-                  </div>
+                  <p className="text-sm font-semibold text-surface-800">{h.name.split(' ').map((w: string) => w[0] + w.slice(1).toLowerCase()).join(' ')}</p>
                   <p className="text-[10px] text-surface-400 font-mono">
-                    {h.ticker} · {h.qty > 0 ? `${h.qty % 1 === 0 ? h.qty : h.qty.toFixed(3)} shares` : 'RSU grant'}
+                    {h.ticker} · {h.qty > 0 ? `${h.qty % 1 === 0 ? h.qty : h.qty.toFixed(3)} shares` : 'position'}
                     {h.priceUSD > 0 ? ` @ $${h.priceUSD.toFixed(2)}` : ''}
                   </p>
                 </div>
                 <div className="text-right shrink-0">
                   <p className="text-sm font-semibold font-mono text-surface-800">${h.valueUSD.toLocaleString('en-US', { maximumFractionDigits: 0 })}</p>
-                  {h.gainUSD !== 0 && !h.unvested && (
+                  {h.gainUSD !== 0 && (
                     <p className={`text-[10px] font-medium ${h.gainUSD >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
                       {h.gainUSD >= 0 ? '+' : ''}${h.gainUSD.toLocaleString('en-US', { maximumFractionDigits: 0 })}
                     </p>
