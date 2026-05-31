@@ -155,11 +155,13 @@ export async function parseFidelityPDF(file: File): Promise<FidelityParseResult>
 
       // Collect numbers from inline portion + following lines
       const numbers: number[] = [...inlineNumbers]
-      for (let j = dataStartIdx; j < Math.min(dataStartIdx + 12, lines.length); j++) {
+      for (let j = dataStartIdx; j < Math.min(dataStartIdx + 20, lines.length); j++) {
         const nextLine = lines[j].trim()
-        if (nextLine.match(sameLinePattern) ||
-            nextLine.match(tickerOnlyPattern) ||
-            nextLine.match(/^(Total|Common Stock|Stocks|Holdings|Core Account|Activity|Stock Plans|Restricted)/i)) break
+        // Stop at a NEW stock entry
+        if (nextLine.match(sameLinePattern) || nextLine.match(tickerOnlyPattern)) break
+        // Stop at top-level section headers (not per-stock sub-totals like "Total Common Stock")
+        if (nextLine.match(/^Total\s+(Stocks|Holdings|Trades|Core)/i)) break
+        if (nextLine.match(/^(Core Account|Activity|Stock Plans|Restricted Stock)/i)) break
         numbers.push(...extractNumbers(nextLine))
       }
 
