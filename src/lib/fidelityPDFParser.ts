@@ -119,10 +119,10 @@ export async function parseFidelityPDF(file: File): Promise<FidelityParseResult>
     const reportDate = new Date().toISOString().slice(0, 10)
     const holdings: FidelityHolding[] = []
 
-    // Pattern 1: ticker on SAME line — "AMAZON.COM INC (AMZN)"
+    // Pattern 1: ticker on SAME line — "AMAZON.COM INC (AMZN) $15,997..."
     const sameLinePattern  = /^(.+?)\s*\(([A-Z]{1,5})\)(.*)?$/
-    // Pattern 2: ticker on NEXT line alone — "(SNOW)"
-    const tickerOnlyPattern = /^\(([A-Z]{1,5})\)\s*$/
+    // Pattern 2: ticker on NEXT line — "(SNOW)" or "(SNOW) -"
+    const tickerOnlyPattern = /^\(([A-Z]{1,5})\)/
 
     // ── Pass 1: Parse Holdings section (vested/settled shares) ─────────────────
     for (let i = 0; i < lines.length; i++) {
@@ -136,14 +136,16 @@ export async function parseFidelityPDF(file: File): Promise<FidelityParseResult>
       if (sameMatch && sameMatch[2]) {
         name   = sameMatch[1].trim()
         ticker = sameMatch[2].trim()
-        // Numbers may be embedded on the same line after "(TICKER)"
         if (sameMatch[3]) inlineNumbers = extractNumbers(sameMatch[3])
       } else {
-        // Check if NEXT line is a standalone ticker
+        // Check if NEXT line starts with a standalone ticker e.g. "(SNOW)" or "(SNOW) -"
         const nextLine = lines[i + 1]?.trim() ?? ''
         const nextTickerMatch = nextLine.match(tickerOnlyPattern)
         if (nextTickerMatch) {
-          name   = line
+          // Numbers are embedded in the current line — extract name as text-before-$
+          const dollarIdx = line.search(/[\d$]/)
+          name = (dollarIdx > 0 ? line.slice(0, dollarIdx) : line).trim()
+          inlineNumbers = extractNumbers(line)   // numbers from the data line itself
           ticker = nextTickerMatch[1]
           dataStartIdx = i + 2
           i++
@@ -174,12 +176,7 @@ export async function parseFidelityPDF(file: File): Promise<FidelityParseResult>
     }
 
     if (!holdings.length) {
-      // Debug: show lines that contain potential tickers to diagnose parse failures
-      const debugLines = lines
-        .filter(l => /\([A-Z]{1,5}\)/.test(l) || /SNOW|AMZN|Common Stock|Stocks/i.test(l))
-        .slice(0, 20)
-        .join(' | ')
-      return { status: 'error', message: `No holdings found. Debug lines: ${debugLines}`, reportDate, holdings: [], totalUSD: 0 }
+      return { status: 'error', message: 'No holdings found. Make sure you upload the full quarterly statement PDF.', reportDate, holdings: [], totalUSD: 0 }
     }
 
     const totalUSD = holdings.reduce((a, h) => a + h.valueUSD, 0)
