@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx'
+import { classifyAll } from './holdingClassifier'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -121,11 +122,23 @@ export async function parseZerodhaXLSX(file: File): Promise<ZerodhaParseResult> 
       return { status: 'error', message: 'No holdings found. Check the file format.', holdings: [], summary: makeSummary([]) }
     }
 
+    // ── Run 4-layer classifier to refine asset classes ─────────────────────
+    const inputs = holdings.map(h => ({
+      isin: h.isin, name: h.symbol,
+      instrumentType: h.isMF ? h.sector : '',
+      sector: !h.isMF ? h.sector : '',
+    }))
+    const classifications = await classifyAll(inputs)
+    classifications.forEach((c, i) => {
+      holdings[i].assetClass = c.assetClass
+      holdings[i].subType    = c.subType
+    })
+
     return {
-      status:   'success',
-      message:  `Found ${holdings.length} holdings across ${new Set(holdings.map(h => h.assetClass)).size} asset classes`,
+      status:  'success',
+      message: `Found ${holdings.length} holdings across ${new Set(holdings.map(h => h.assetClass)).size} asset classes`,
       holdings,
-      summary:  makeSummary(holdings),
+      summary: makeSummary(holdings),
     }
   } catch (err: any) {
     return { status: 'error', message: String(err?.message ?? 'Failed to parse file'), holdings: [], summary: makeSummary([]) }

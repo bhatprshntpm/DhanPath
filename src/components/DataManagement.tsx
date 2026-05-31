@@ -30,15 +30,18 @@ const TABS = [
 function ZerodhaTab() {
   const { addHolding } = useApp()
   const fileRef   = useRef<HTMLInputElement>(null)
-  const [parsing, setParsing]   = useState(false)
-  const [result,  setResult]    = useState<ZerodhaParseResult | null>(null)
+  const [parsing,  setParsing]  = useState(false)
+  const [progress, setProgress] = useState({ done: 0, total: 0 })
+  const [result,   setResult]   = useState<ZerodhaParseResult | null>(null)
   const [imported, setImported] = useState(false)
 
   async function handleFile(file: File) {
     setParsing(true)
     setResult(null)
     setImported(false)
+    setProgress({ done: 0, total: 0 })
     const r = await parseZerodhaXLSX(file)
+    setProgress({ done: 0, total: 0 })
     setResult(r)
     setParsing(false)
   }
@@ -81,9 +84,19 @@ function ZerodhaTab() {
       )}
 
       {parsing && (
-        <div className="flex items-center justify-center gap-3 py-12">
+        <div className="flex flex-col items-center justify-center gap-3 py-12">
           <Loader2 size={20} className="animate-spin text-amber-500" />
-          <span className="text-sm text-surface-600">Parsing holdings…</span>
+          <span className="text-sm text-surface-600">
+            {progress.total > 0
+              ? `Classifying holdings… ${progress.done}/${progress.total}`
+              : 'Parsing your holdings…'}
+          </span>
+          {progress.total > 0 && (
+            <div className="w-48 bg-surface-100 rounded-full h-1.5">
+              <div className="h-1.5 rounded-full bg-amber-400 transition-all"
+                style={{ width: `${(progress.done / progress.total) * 100}%` }} />
+            </div>
+          )}
         </div>
       )}
 
