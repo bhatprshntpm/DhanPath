@@ -116,7 +116,7 @@ export async function parseFidelityPDF(file: File): Promise<FidelityParseResult>
     const holdings: FidelityHolding[] = []
 
     // Pattern 1: ticker on SAME line — "AMAZON.COM INC (AMZN)"
-    const sameLinePattern = /^(.+?)\s+\(([A-Z]{1,5})\)\s*(?:\s+.*)?$/
+    const sameLinePattern  = /^(.+?)\s+\(([A-Z]{1,5})\)(.*)?$/
     // Pattern 2: ticker on NEXT line alone — "(SNOW)"
     const tickerOnlyPattern = /^\(([A-Z]{1,5})\)\s*$/
 
@@ -125,12 +125,15 @@ export async function parseFidelityPDF(file: File): Promise<FidelityParseResult>
       const line = lines[i].trim()
 
       let name = '', ticker = '', dataStartIdx = i + 1
+      let inlineNumbers: number[] = []
 
-      // Check same-line pattern
+      // Check same-line pattern — also capture anything after the ticker (inline numbers)
       const sameMatch = line.match(sameLinePattern)
       if (sameMatch && sameMatch[2]) {
         name   = sameMatch[1].trim()
         ticker = sameMatch[2].trim()
+        // Numbers may be embedded on the same line after "(TICKER)"
+        if (sameMatch[3]) inlineNumbers = extractNumbers(sameMatch[3])
       } else {
         // Check if NEXT line is a standalone ticker
         const nextLine = lines[i + 1]?.trim() ?? ''
@@ -138,16 +141,16 @@ export async function parseFidelityPDF(file: File): Promise<FidelityParseResult>
         if (nextTickerMatch) {
           name   = line
           ticker = nextTickerMatch[1]
-          dataStartIdx = i + 2  // skip the ticker line
-          i++                   // advance past the ticker line
+          dataStartIdx = i + 2
+          i++
         }
       }
 
       if (!name || !ticker) continue
       if (isSkippable(name, ticker)) continue
 
-      // Collect numbers from the following lines until a new stock or section header
-      const numbers: number[] = []
+      // Collect numbers from inline portion + following lines
+      const numbers: number[] = [...inlineNumbers]
       for (let j = dataStartIdx; j < Math.min(dataStartIdx + 12, lines.length); j++) {
         const nextLine = lines[j].trim()
         if (nextLine.match(sameLinePattern) ||
@@ -158,8 +161,7 @@ export async function parseFidelityPDF(file: File): Promise<FidelityParseResult>
 
       const parsed = parseHoldingNumbers(numbers)
       if (parsed && parsed.valueUSD > 0) {
-        // Avoid duplicates — if we already have this ticker as vested, skip
-        if (!holdings.find(h => h.ticker === ticker && !h.unvested)) {
+        if (!holdings.find(h => h.ticker === ticker)) {
           holdings.push({ name, ticker, ...parsed, unvested: false })
         }
       }
