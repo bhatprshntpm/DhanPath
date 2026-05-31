@@ -120,7 +120,7 @@ export async function parseFidelityPDF(file: File): Promise<FidelityParseResult>
     const holdings: FidelityHolding[] = []
 
     // Pattern 1: ticker on SAME line — "AMAZON.COM INC (AMZN)"
-    const sameLinePattern  = /^(.+?)\s+\(([A-Z]{1,5})\)(.*)?$/
+    const sameLinePattern  = /^(.+?)\s*\(([A-Z]{1,5})\)(.*)?$/
     // Pattern 2: ticker on NEXT line alone — "(SNOW)"
     const tickerOnlyPattern = /^\(([A-Z]{1,5})\)\s*$/
 
