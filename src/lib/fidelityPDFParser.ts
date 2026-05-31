@@ -174,7 +174,12 @@ export async function parseFidelityPDF(file: File): Promise<FidelityParseResult>
     }
 
     if (!holdings.length) {
-      return { status: 'error', message: 'No holdings found. Make sure you upload the full quarterly statement PDF.', reportDate, holdings: [], totalUSD: 0 }
+      // Debug: show lines that contain potential tickers to diagnose parse failures
+      const debugLines = lines
+        .filter(l => /\([A-Z]{1,5}\)/.test(l) || /SNOW|AMZN|Common Stock|Stocks/i.test(l))
+        .slice(0, 20)
+        .join(' | ')
+      return { status: 'error', message: `No holdings found. Debug lines: ${debugLines}`, reportDate, holdings: [], totalUSD: 0 }
     }
 
     const totalUSD = holdings.reduce((a, h) => a + h.valueUSD, 0)
