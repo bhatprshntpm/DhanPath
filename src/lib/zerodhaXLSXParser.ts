@@ -336,8 +336,8 @@ export function zerodhaToSnapshot(parsed: ZerodhaParseResult): Omit<NetWorthSnap
     date: new Date().toISOString().slice(0, 7),
     assets: {
       checking:   0,
-      savings:    Math.round(by['Debt'] ?? 0),
-      brokerage:  Math.round((by['Equity'] ?? 0)),
+      savings:    0,
+      brokerage:  Math.round((by['Equity'] ?? 0) + (by['Debt'] ?? 0) + (by['International'] ?? 0) + (by['Cryptocurrency'] ?? 0)),
       retirement: 0,
       realEstate: 0,
       other:      Math.round(by['Gold'] ?? 0),

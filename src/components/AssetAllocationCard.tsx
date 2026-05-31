@@ -68,8 +68,8 @@ export default function AssetAllocationCard() {
       buckets[cat] = (buckets[cat] ?? 0) + h.value
     }
     if (latest) {
-      if (latest.assets.checking + latest.assets.savings > 0)
-        buckets['Cash'] = (buckets['Cash'] ?? 0) + latest.assets.checking + latest.assets.savings
+      if (latest.assets.checking > 0)
+        buckets['Cash'] = (buckets['Cash'] ?? 0) + latest.assets.checking
       if (latest.assets.realEstate > 0)
         buckets['Real Estate'] = (buckets['Real Estate'] ?? 0) + latest.assets.realEstate
     }
@@ -170,40 +170,17 @@ export default function AssetAllocationCard() {
         />
       ) : (
         <>
-          {/* Portfolio total + liabilities reconciliation */}
-          {hasAnyData && (() => {
-            const liab = latest?.liabilities
-            const totalLiab = liab
-              ? (liab.mortgage ?? 0) + (liab.studentLoans ?? 0) + (liab.creditCards ?? 0) + (liab.autoLoans ?? 0) + (liab.other ?? 0)
-              : 0
-            const netWorth = total - totalLiab
-            return (
-              <div>
-                <p className="kpi-value">{fmtINR(total)}</p>
-                {totalCost > 0 && (
-                  <p className={`text-xs font-medium mt-0.5 ${gain >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
-                    {gain >= 0 ? '+' : ''}{fmtINR(gain)} ({fmtPct(gainPct)}) overall return
-                  </p>
-                )}
-                {totalLiab > 0 && (
-                  <div className="mt-3 pt-3 border-t border-surface-100 flex flex-col gap-1">
-                    <div className="flex items-center justify-between text-[11px] text-surface-500">
-                      <span>Gross portfolio</span>
-                      <span className="font-mono">{fmtINR(total)}</span>
-                    </div>
-                    <div className="flex items-center justify-between text-[11px] text-rose-500">
-                      <span>Liabilities (loans)</span>
-                      <span className="font-mono">−{fmtINR(totalLiab)}</span>
-                    </div>
-                    <div className="flex items-center justify-between text-[11px] font-semibold text-surface-800 pt-1 border-t border-surface-100">
-                      <span>Net Worth</span>
-                      <span className="font-mono">{fmtINR(netWorth)}</span>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )
-          })()}
+          {/* Portfolio total */}
+          {hasAnyData && (
+            <div>
+              <p className="kpi-value">{fmtINR(total)}</p>
+              {totalCost > 0 && (
+                <p className={`text-xs font-medium mt-0.5 ${gain >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
+                  {gain >= 0 ? '+' : ''}{fmtINR(gain)} ({fmtPct(gainPct)}) overall return
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Donut + summary row */}
           {pieData.length > 0 && (
