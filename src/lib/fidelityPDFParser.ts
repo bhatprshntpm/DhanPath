@@ -68,11 +68,15 @@ function extractNumbers(line: string): number[] {
 
 function isSkippable(name: string, ticker: string): boolean {
   const n = name.toUpperCase()
-  return n.includes('MMKT') || n.includes('TREASURY') ||
-         n.includes('MONEY MARKET') || n.includes('ACCRUED') ||
-         n.startsWith('TOTAL') || n.startsWith('ENDING') ||
-         n.startsWith('BEGINNING') || n.startsWith('CHANGE IN') ||
-         ticker === 'FYIXX' || ticker === 'AI'
+  // Skip financial statement metadata lines and glossary terms
+  if (n.includes('MMKT') || n.includes('TREASURY') || n.includes('MONEY MARKET')) return true
+  if (n.includes('ACCRUED') || n.includes('DIVIDEND') || n.includes('ESTIMATED')) return true
+  if (n.includes('INDICATED') || n.includes('INTEREST') || n.includes('YIELD')) return true
+  if (n.startsWith('TOTAL') || n.startsWith('ENDING') || n.startsWith('BEGINNING')) return true
+  if (n.startsWith('CHANGE IN') || n.startsWith('COPYRIGHT') || n.startsWith('ALL POSITIONS')) return true
+  // Skip known non-stock tickers
+  const skipTickers = new Set(['FYIXX', 'AI', 'IAD', 'EAI', 'EY', 'NFS', 'SIPC', 'SWR'])
+  return skipTickers.has(ticker)
 }
 
 // ─── Parse numbers after a stock entry into qty/price/value/cost ──────────────
@@ -92,8 +96,8 @@ function parseHoldingNumbers(numbers: number[]): { qty: number; priceUSD: number
       }
     }
   }
-  // Fallback when qty verification fails but we have values
-  const largeNums = numbers.filter(n => n > 10)
+  // Fallback when qty verification fails — cap at $5M to avoid picking up footnote numbers
+  const largeNums = numbers.filter(n => n > 10 && n < 5_000_000)
   if (largeNums.length >= 2) {
     const valueUSD = Math.max(...largeNums)
     const costBasisUSD = largeNums.find(n => n < valueUSD) ?? 0
