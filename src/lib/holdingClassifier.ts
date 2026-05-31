@@ -27,27 +27,27 @@ export function classifyISINPrefix(isin: string): ISINType {
 
 const SEBI_CATEGORY_MAP: Record<string, { assetClass: AssetClass; subType: string }> = {
   // Equity schemes
-  'Equity - Multi Cap':               { assetClass: 'Equity Mutual Funds', subType: 'Multi Cap' },
-  'Equity - Large Cap':               { assetClass: 'Equity Mutual Funds', subType: 'Large Cap' },
-  'Equity - Large & Mid Cap':         { assetClass: 'Equity Mutual Funds', subType: 'Large & Mid Cap' },
-  'Equity - Mid Cap':                 { assetClass: 'Equity Mutual Funds', subType: 'Mid Cap' },
-  'Equity - Small Cap':               { assetClass: 'Equity Mutual Funds', subType: 'Small Cap' },
-  'Equity - Dividend Yield':          { assetClass: 'Equity Mutual Funds', subType: 'Dividend Yield' },
-  'Equity - Value':                   { assetClass: 'Equity Mutual Funds', subType: 'Value' },
-  'Equity - Contra':                  { assetClass: 'Equity Mutual Funds', subType: 'Contra' },
-  'Equity - Focused':                 { assetClass: 'Equity Mutual Funds', subType: 'Focused' },
-  'Equity - Sectoral/Thematic':       { assetClass: 'Equity Mutual Funds', subType: 'Sectoral / Thematic' },
-  'Equity - ELSS':                    { assetClass: 'Equity Mutual Funds', subType: 'ELSS (Tax Saving)' },
-  'Equity - Flexi Cap':               { assetClass: 'Equity Mutual Funds', subType: 'Flexi Cap' },
-  'Equity - International':           { assetClass: 'International',       subType: 'International Equity MF' },
+  'Equity - Multi Cap':               { assetClass: 'Equity', subType: 'Multi Cap' },
+  'Equity - Large Cap':               { assetClass: 'Equity', subType: 'Large Cap' },
+  'Equity - Large & Mid Cap':         { assetClass: 'Equity', subType: 'Large & Mid Cap' },
+  'Equity - Mid Cap':                 { assetClass: 'Equity', subType: 'Mid Cap' },
+  'Equity - Small Cap':               { assetClass: 'Equity', subType: 'Small Cap' },
+  'Equity - Dividend Yield':          { assetClass: 'Equity', subType: 'Dividend Yield' },
+  'Equity - Value':                   { assetClass: 'Equity', subType: 'Value' },
+  'Equity - Contra':                  { assetClass: 'Equity', subType: 'Contra' },
+  'Equity - Focused':                 { assetClass: 'Equity', subType: 'Focused' },
+  'Equity - Sectoral/Thematic':       { assetClass: 'Equity', subType: 'Sectoral / Thematic' },
+  'Equity - ELSS':                    { assetClass: 'Equity', subType: 'ELSS (Tax Saving)' },
+  'Equity - Flexi Cap':               { assetClass: 'Equity', subType: 'Flexi Cap' },
+  'Equity - International':           { assetClass: 'International',       subType: 'International Fund' },
 
   // Hybrid schemes
-  'Hybrid - Balanced Advantage':      { assetClass: 'Equity Mutual Funds', subType: 'Balanced Advantage' },
-  'Hybrid - Aggressive Hybrid':       { assetClass: 'Equity Mutual Funds', subType: 'Aggressive Hybrid' },
+  'Hybrid - Balanced Advantage':      { assetClass: 'Equity', subType: 'Balanced Advantage' },
+  'Hybrid - Aggressive Hybrid':       { assetClass: 'Equity', subType: 'Aggressive Hybrid' },
   'Hybrid - Conservative Hybrid':     { assetClass: 'Debt',                subType: 'Conservative Hybrid' },
   'Hybrid - Arbitrage':               { assetClass: 'Debt',                subType: 'Arbitrage' },
-  'Hybrid - Multi Asset Allocation':  { assetClass: 'Equity Mutual Funds', subType: 'Multi Asset' },
-  'Hybrid - Equity Savings':          { assetClass: 'Equity Mutual Funds', subType: 'Equity Savings' },
+  'Hybrid - Multi Asset Allocation':  { assetClass: 'Equity', subType: 'Multi Asset' },
+  'Hybrid - Equity Savings':          { assetClass: 'Equity', subType: 'Equity Savings' },
 
   // Debt schemes
   'Debt - Overnight':                 { assetClass: 'Debt', subType: 'Overnight / Liquid' },
@@ -68,10 +68,10 @@ const SEBI_CATEGORY_MAP: Record<string, { assetClass: AssetClass; subType: strin
   'Debt - Floater':                   { assetClass: 'Debt', subType: 'Floater' },
 
   // Others (index/ETF/FoF from Zerodha's Instrument Type labels)
-  'Others - Index Funds/ETFs':        { assetClass: 'Index Funds & ETFs', subType: 'Index Fund / ETF' },
-  'Others - Fund of Funds':           { assetClass: 'International',      subType: 'Fund of Funds' },
-  'Others - Fund of Funds (Domestic)':{ assetClass: 'Equity Mutual Funds', subType: 'Fund of Funds (Domestic)' },
-  'Others - ETF':                     { assetClass: 'Index Funds & ETFs', subType: 'ETF' },
+  'Others - Index Funds/ETFs':        { assetClass: 'Equity', subType: 'Index ETF' },
+  'Others - Fund of Funds':           { assetClass: 'International',      subType: 'International Fund' },
+  'Others - Fund of Funds (Domestic)':{ assetClass: 'Equity', subType: 'Fund of Funds (Domestic)' },
+  'Others - ETF':                     { assetClass: 'Equity', subType: 'Index ETF' },
 }
 
 export function classifyBySebiCategory(instrumentType: string): { assetClass: AssetClass; subType: string } | null {
@@ -85,9 +85,9 @@ export function classifyBySebiCategory(instrumentType: string): { assetClass: As
 
   // Fuzzy: category prefix
   const t = instrumentType.toLowerCase()
-  if (t.startsWith('equity'))  return { assetClass: 'Equity Mutual Funds', subType: instrumentType.split(' - ').slice(1).join(' ') || 'Equity' }
+  if (t.startsWith('equity'))  return { assetClass: 'Equity', subType: instrumentType.split(' - ').slice(1).join(' ') || 'Equity' }
   if (t.startsWith('debt'))    return { assetClass: 'Debt',                subType: instrumentType.split(' - ').slice(1).join(' ') || 'Debt' }
-  if (t.startsWith('hybrid'))  return { assetClass: 'Equity Mutual Funds', subType: instrumentType.split(' - ').slice(1).join(' ') || 'Hybrid' }
+  if (t.startsWith('hybrid'))  return { assetClass: 'Equity', subType: instrumentType.split(' - ').slice(1).join(' ') || 'Hybrid' }
 
   return null
 }
@@ -131,19 +131,19 @@ const LIQUID_ISINS = new Set([
 
 // Name-based patterns for ETF sub-classification (when ISIN not in table)
 const ETF_NAME_PATTERNS: [RegExp, { assetClass: AssetClass; subType: string }][] = [
-  [/gold\s*bees|gold\s*etf|sovereign\s*gold/i,    { assetClass: 'Gold',              subType: 'Gold ETF / SGB'      }],
+  [/gold\s*bees|gold\s*etf|sovereign\s*gold/i,    { assetClass: 'Gold',              subType: 'Gold ETF'      }],
   [/liquid\s*bees|liquid\s*etf|money\s*market/i,  { assetClass: 'Debt',              subType: 'Overnight / Liquid'  }],
-  [/nasdaq|s&p\s*500|us\s*equity|global|fang/i,   { assetClass: 'International',     subType: 'International ETF'   }],
-  [/nifty\s*bank|bank\s*bees/i,                   { assetClass: 'Index Funds & ETFs', subType: 'Sectoral ETF (Bank)' }],
-  [/nifty\s*50|nifty\s*100|sensex|bse\s*200/i,    { assetClass: 'Index Funds & ETFs', subType: 'Broad Index ETF'     }],
-  [/nifty\s*mid|nifty\s*small|nifty\s*next/i,     { assetClass: 'Index Funds & ETFs', subType: 'Index ETF (Mid/Small)'}],
+  [/nasdaq|s&p\s*500|us\s*equity|global|fang/i,   { assetClass: 'International',     subType: 'Global ETF'   }],
+  [/nifty\s*bank|bank\s*bees/i,                   { assetClass: 'Equity', subType: 'Equity ETF' }],
+  [/nifty\s*50|nifty\s*100|sensex|bse\s*200/i,    { assetClass: 'Equity', subType: 'Index ETF'     }],
+  [/nifty\s*mid|nifty\s*small|nifty\s*next/i,     { assetClass: 'Equity', subType: 'Index ETF'}],
   [/psu\s*bond|gilt|government|g-sec/i,            { assetClass: 'Debt',              subType: 'Debt ETF'            }],
   [/silver/i,                                      { assetClass: 'Gold',              subType: 'Silver ETF'          }],
 ]
 
 export function classifyByBundledLookup(isin: string, name: string): { assetClass: AssetClass; subType: string } | null {
   if (GOLD_ISINS.has(isin))          return { assetClass: 'Gold',          subType: 'Gold ETF'           }
-  if (INTERNATIONAL_ISINS.has(isin)) return { assetClass: 'International', subType: 'International ETF'  }
+  if (INTERNATIONAL_ISINS.has(isin)) return { assetClass: 'International', subType: 'Global ETF'  }
   if (LIQUID_ISINS.has(isin))        return { assetClass: 'Debt',          subType: 'Overnight / Liquid' }
 
   // ISIN prefix IN8 = SGB
@@ -248,9 +248,9 @@ function classifyFromSchemeName(name: string): { assetClass: AssetClass; subType
   if (n.includes('debt') || n.includes('bond') || n.includes('income') || n.includes('credit'))
     return { assetClass: 'Debt', subType: 'Debt Fund' }
   if (n.includes('index') || n.includes('nifty') || n.includes('sensex'))
-    return { assetClass: 'Index Funds & ETFs', subType: 'Index Fund' }
-  if (n.includes('elss') || n.includes('tax sav')) return { assetClass: 'Equity Mutual Funds', subType: 'ELSS (Tax Saving)' }
-  if (n.includes('equity') || n.includes('growth')) return { assetClass: 'Equity Mutual Funds', subType: 'Equity MF' }
+    return { assetClass: 'Equity', subType: 'Index Fund' }
+  if (n.includes('elss') || n.includes('tax sav')) return { assetClass: 'Equity', subType: 'ELSS (Tax Saving)' }
+  if (n.includes('equity') || n.includes('growth')) return { assetClass: 'Equity', subType: 'Equity Mutual Fund' }
   return null
 }
 
@@ -299,9 +299,9 @@ export async function classifyHolding(
     if (sector.toUpperCase() === 'ETF') {
       const etfGuess = classifyByBundledLookup(isin, name)
       if (etfGuess) return { ...etfGuess, source: 'etf-pattern' }
-      return { assetClass: 'Index Funds & ETFs', subType: 'ETF', source: 'sector' }
+      return { assetClass: 'Equity', subType: 'Index ETF', source: 'sector' }
     }
-    return { assetClass: 'Direct Equity', subType: sector || 'Equity', source: 'sector' }
+    return { assetClass: 'Equity', subType: sector || 'Equity', source: 'sector' }
   }
 
   return { assetClass: 'Other', subType: instrumentType || sector || 'Unknown', source: 'fallback' }

@@ -6,19 +6,15 @@ import { fmtINR, fmtPct } from '../lib/calc'
 import EmptyState from './EmptyState'
 
 const ASSET_COLORS: Record<string, string> = {
-  'Mutual Funds & Stocks': '#f59e0b',
-  'Equity':                '#f59e0b',
-  'Mutual Funds':          '#6366f1',
-  'EPF / NPS / PPF':       '#10b981',
-  'Retirement':            '#10b981',
-  'Real Estate':           '#8b5cf6',
-  'Cash & Deposits':       '#a8a29e',
-  'Cash':                  '#a8a29e',
-  'Fixed Income':          '#3b82f6',
-  'Gold & Other':          '#f97316',
-  'Gold':                  '#f97316',
-  'Crypto':                '#ec4899',
-  'Other':                 '#d6d3d1',
+  'Equity':         '#f59e0b',
+  'Debt':           '#3b82f6',
+  'Gold':           '#f97316',
+  'International':  '#8b5cf6',
+  'Cryptocurrency': '#ec4899',
+  'Real Estate':    '#10b981',
+  'Cash':           '#a8a29e',
+  'EPF / NPS / PPF':'#10b981',
+  'Other':          '#d6d3d1',
 }
 
 interface AssetClass { name: string; value: number; color: string }
@@ -42,29 +38,29 @@ export default function AssetAllocationCard() {
     // Holdings give us the detailed breakdown
     for (const h of data.holdings) {
       const cat =
-        h.type === 'stock'      ? 'Direct Equity'     :
-        h.type === 'etf'        ? 'Mutual Funds & ETFs':
-        h.type === 'bond'       ? 'Fixed Income / Debt':
-        h.type === 'retirement' ? 'EPF / NPS / PPF'   :
-        h.type === 'crypto'     ? 'Crypto'             :
-        h.type === 'cash'       ? 'Cash & Deposits'    : 'Other'
+        h.type === 'stock'      ? 'Equity'         :
+        h.type === 'etf'        ? 'Equity'          :
+        h.type === 'bond'       ? 'Debt'            :
+        h.type === 'retirement' ? 'EPF / NPS / PPF' :
+        h.type === 'crypto'     ? 'Cryptocurrency'  :
+        h.type === 'cash'       ? 'Cash'            : 'Other'
       buckets[cat] = (buckets[cat] ?? 0) + h.value
     }
-    // Add cash, real estate from snapshot (NOT in holdings)
+    // Add cash, real estate from snapshot (NOT covered by holdings)
     if (latest) {
       if (latest.assets.checking + latest.assets.savings > 0)
-        buckets['Cash & Deposits'] = (buckets['Cash & Deposits'] ?? 0) + latest.assets.checking + latest.assets.savings
+        buckets['Cash'] = (buckets['Cash'] ?? 0) + latest.assets.checking + latest.assets.savings
       if (latest.assets.realEstate > 0)
         buckets['Real Estate'] = (buckets['Real Estate'] ?? 0) + latest.assets.realEstate
     }
   } else if (latest) {
     // No holdings — fall back to snapshot buckets
     const a = latest.assets
-    if (a.checking + a.savings > 0) buckets['Cash & Deposits']   = a.checking + a.savings
-    if (a.brokerage > 0)            buckets['Mutual Funds & ETFs']= a.brokerage
-    if (a.retirement > 0)           buckets['EPF / NPS / PPF']   = a.retirement
-    if (a.realEstate > 0)           buckets['Real Estate']        = a.realEstate
-    if (a.other > 0)                buckets['Gold & Other']       = a.other
+    if (a.checking + a.savings > 0) buckets['Cash']           = a.checking + a.savings
+    if (a.brokerage > 0)            buckets['Equity']         = a.brokerage
+    if (a.retirement > 0)           buckets['EPF / NPS / PPF']= a.retirement
+    if (a.realEstate > 0)           buckets['Real Estate']    = a.realEstate
+    if (a.other > 0)                buckets['Gold']           = a.other
   }
 
   const classes: AssetClass[] = Object.entries(buckets)

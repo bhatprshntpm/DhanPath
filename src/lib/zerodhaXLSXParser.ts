@@ -5,15 +5,16 @@ import { classifyAll } from './holdingClassifier'
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type AssetClass =
-  | 'Direct Equity'
-  | 'Equity Mutual Funds'
-  | 'Index Funds & ETFs'
+  | 'Equity'
   | 'Debt'
   | 'Gold'
   | 'International'
+  | 'Cryptocurrency'
+  | 'Real Estate'
+  | 'Cash'
   | 'Other'
 
-export type EquitySubType = 'Direct Equity' | 'Equity MF' | 'Index ETF' | 'Debt MF' | 'Gold' | 'International' | 'Other'
+export type EquitySubType = 'Direct Stock' | 'Equity Mutual Fund' | 'Index ETF' | 'Equity ETF' | 'Debt Mutual Fund' | 'Debt ETF' | 'G-Sec / Bond' | 'Gold ETF' | 'Gold Fund' | 'Gold SGB' | 'International Fund' | 'International ETF' | 'Crypto' | 'Real Estate' | 'Liquid Fund' | 'Other'
 
 export interface ZerodhaHolding {
   symbol:      string
@@ -62,9 +63,9 @@ function classifyEquity(sector: string, symbol: string): { assetClass: AssetClas
   }
   if (s === 'ETF' || GOLD_PATTERNS.test(sym)) {
     if (GOLD_PATTERNS.test(sym)) return { assetClass: 'Gold', subType: 'Gold ETF', isETF: true }
-    return { assetClass: 'Index Funds & ETFs', subType: 'ETF', isETF: true }
+    return { assetClass: 'Equity', subType: 'Index ETF', isETF: true }
   }
-  return { assetClass: 'Direct Equity', subType: sector || 'Equity', isETF: false }
+  return { assetClass: 'Equity', subType: 'Direct Stock', isETF: false }
 }
 
 function classifyMF(instrumentType: string, symbol: string): { assetClass: AssetClass; subType: string } {
@@ -74,10 +75,10 @@ function classifyMF(instrumentType: string, symbol: string): { assetClass: Asset
   if (GOLD_PATTERNS.test(s) || GOLD_PATTERNS.test(t)) return { assetClass: 'Gold',          subType: 'Gold Fund'           }
   if (INTL_PATTERNS.test(s) || INTL_PATTERNS.test(t)) return { assetClass: 'International',  subType: 'International Fund'  }
   if (LIQUID_PATTERNS.test(t))                        return { assetClass: 'Debt',            subType: 'Liquid / Money Mkt'  }
-  if (t.includes('index') || t.includes('etf'))       return { assetClass: 'Index Funds & ETFs', subType: extractMFSubtype(instrumentType) }
+  if (t.includes('index') || t.includes('etf'))       return { assetClass: 'Equity', subType: 'Index ETF' }
   if (t.startsWith('debt') || t.startsWith('hybrid - debt') || t.includes('gilt'))
                                                        return { assetClass: 'Debt',            subType: extractMFSubtype(instrumentType) }
-  if (t.startsWith('equity') || t.includes('elss'))   return { assetClass: 'Equity Mutual Funds', subType: extractMFSubtype(instrumentType) }
+  if (t.startsWith('equity') || t.includes('elss'))   return { assetClass: 'Equity', subType: extractMFSubtype(instrumentType) }
   if (t.includes('fund of fund'))                     return { assetClass: 'International',   subType: 'Fund of Funds'       }
   return { assetClass: 'Other', subType: instrumentType }
 }
@@ -207,8 +208,8 @@ function parseCombinedRows(rows: any[][], out: ZerodhaHolding[]) {
       currentValue: qty * curPrice, costBasis: qty * avgPrice,
       unrealisedPL: pnl, unrealisedPLPct: pnlPct,
       assetClass, subType,
-      isEquity: !isMF && assetClass === 'Direct Equity',
-      isMF: !!isMF, isETF: isETF || (!!isMF && assetClass === 'Index Funds & ETFs'),
+      isEquity: !isMF && assetClass === 'Equity',
+      isMF: !!isMF, isETF: isETF || (!!isMF && assetClass === 'Equity'),
     })
   }
 }
@@ -271,7 +272,7 @@ function parseMFRows(rows: any[][], out: ZerodhaHolding[]) {
       currentValue: qty * cur, costBasis: qty * avg,
       unrealisedPL: pnl, unrealisedPLPct: pct,
       assetClass, subType, isEquity: false, isMF: true,
-      isETF: assetClass === 'Index Funds & ETFs',
+      isETF: assetClass === 'Equity',
     })
   }
 }
@@ -317,12 +318,11 @@ export function zerodhaToHoldings(parsed: ZerodhaParseResult): Omit<Holding, 'id
 }
 
 function holdingType(h: ZerodhaHolding): Holding['type'] {
-  if (h.assetClass === 'Gold')                 return 'bond'       // using 'bond' bucket for gold too
-  if (h.assetClass === 'Debt')                 return 'bond'
-  if (h.assetClass === 'Index Funds & ETFs')   return 'etf'
-  if (h.assetClass === 'Equity Mutual Funds')  return 'etf'
-  if (h.assetClass === 'International')        return 'etf'
-  if (h.assetClass === 'Direct Equity')        return 'stock'
+  if (h.assetClass === 'Gold')           return 'bond'
+  if (h.assetClass === 'Debt')           return 'bond'
+  if (h.assetClass === 'Cryptocurrency') return 'crypto'
+  if (h.assetClass === 'International')  return 'etf'
+  if (h.assetClass === 'Equity' && h.subType === 'Direct Stock') return 'stock'
   return 'etf'
 }
 
@@ -337,7 +337,7 @@ export function zerodhaToSnapshot(parsed: ZerodhaParseResult): Omit<NetWorthSnap
     assets: {
       checking:   0,
       savings:    Math.round(by['Debt'] ?? 0),
-      brokerage:  Math.round((by['Direct Equity'] ?? 0) + (by['Equity Mutual Funds'] ?? 0) + (by['Index Funds & ETFs'] ?? 0) + (by['International'] ?? 0)),
+      brokerage:  Math.round((by['Equity'] ?? 0)),
       retirement: 0,
       realEstate: 0,
       other:      Math.round(by['Gold'] ?? 0),

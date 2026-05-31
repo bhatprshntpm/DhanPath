@@ -6,13 +6,14 @@ import type { ZerodhaHolding } from '../lib/zerodhaXLSXParser'
 
 // ─── Colours ──────────────────────────────────────────────────────────────────
 const CLASS_COLORS: Record<string, string> = {
-  'Direct Equity':        '#f59e0b',
-  'Equity Mutual Funds':  '#6366f1',
-  'Index Funds & ETFs':   '#10b981',
-  'Debt':                 '#3b82f6',
-  'Gold':                 '#f97316',
-  'International':        '#8b5cf6',
-  'Other':                '#a8a29e',
+  'Equity':         '#f59e0b',
+  'Debt':           '#3b82f6',
+  'Gold':           '#f97316',
+  'International':  '#8b5cf6',
+  'Cryptocurrency': '#ec4899',
+  'Real Estate':    '#10b981',
+  'Cash':           '#a8a29e',
+  'Other':          '#d6d3d1',
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
