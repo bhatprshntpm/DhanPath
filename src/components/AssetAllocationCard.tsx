@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { ChevronDown, ChevronUp, Plus, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
 import { useApp } from '../context/AppContext'
 import { fmtINR, fmtPct } from '../lib/calc'
 import EmptyState from './EmptyState'
+import type { Holding } from '../types'
 
 const ASSET_COLORS: Record<string, string> = {
   'Equity':         '#f59e0b',
@@ -13,13 +14,11 @@ const ASSET_COLORS: Record<string, string> = {
   'Cryptocurrency': '#ec4899',
   'Real Estate':    '#10b981',
   'Cash':           '#a8a29e',
-  'EPF / NPS / PPF':'#10b981',
+  'EPF / NPS / PPF':'#6366f1',
   'Other':          '#d6d3d1',
 }
 
 const ALL_CLASSES = ['Equity', 'Debt', 'Gold', 'International', 'Cryptocurrency', 'Real Estate', 'Cash'] as const
-
-interface AssetClass { name: string; value: number; color: string }
 
 const CLASS_HINTS: Record<string, string> = {
   'Equity':         'Stocks, mutual funds, ETFs — import Zerodha XLSX to populate',
@@ -31,34 +30,42 @@ const CLASS_HINTS: Record<string, string> = {
   'Cash':           'Savings accounts, FDs — add via Net Worth snapshot',
 }
 
+function holdingClass(h: Holding): string {
+  if (h.type === 'stock')      return 'Equity'
+  if (h.type === 'etf')        return 'Equity'
+  if (h.type === 'bond')       return 'Debt'
+  if (h.type === 'retirement') return 'EPF / NPS / PPF'
+  if (h.type === 'crypto')     return 'Cryptocurrency'
+  if (h.type === 'cash')       return 'Cash'
+  return 'Other'
+}
+
+function holdingSubType(h: Holding): string {
+  if (h.type === 'stock')      return 'Direct Stock'
+  if (h.type === 'etf')        return 'Mutual Fund / ETF'
+  if (h.type === 'bond')       return 'Debt / Fixed Income'
+  if (h.type === 'retirement') return 'Retirement Fund'
+  if (h.type === 'crypto')     return 'Cryptocurrency'
+  return 'Other'
+}
+
 export default function AssetAllocationCard() {
   const { data, addHolding, deleteHolding } = useApp()
-  const [expanded, setExpanded] = useState(false)
+  const [expandedClass, setExpandedClass] = useState<string | null>(null)
+  const [showAddForm,   setShowAddForm]   = useState(false)
   const [form, setForm] = useState({ name: '', ticker: '', type: 'etf' as const, value: '', costBasis: '' })
 
   const latest = data.snapshots.length
     ? [...data.snapshots].sort((a, b) => a.date.localeCompare(b.date)).at(-1)
     : null
 
-  const hasHoldings = data.holdings.length > 0
-
-  // Build buckets — holdings are the primary source (specific)
-  // Snapshot supplements only assets NOT covered by holdings (cash, real estate)
+  // Build buckets
   const buckets: Record<string, number> = {}
-
-  if (hasHoldings) {
-    // Holdings give us the detailed breakdown
+  if (data.holdings.length > 0) {
     for (const h of data.holdings) {
-      const cat =
-        h.type === 'stock'      ? 'Equity'         :
-        h.type === 'etf'        ? 'Equity'          :
-        h.type === 'bond'       ? 'Debt'            :
-        h.type === 'retirement' ? 'EPF / NPS / PPF' :
-        h.type === 'crypto'     ? 'Cryptocurrency'  :
-        h.type === 'cash'       ? 'Cash'            : 'Other'
+      const cat = holdingClass(h)
       buckets[cat] = (buckets[cat] ?? 0) + h.value
     }
-    // Add cash, real estate from snapshot (NOT covered by holdings)
     if (latest) {
       if (latest.assets.checking + latest.assets.savings > 0)
         buckets['Cash'] = (buckets['Cash'] ?? 0) + latest.assets.checking + latest.assets.savings
@@ -66,180 +73,229 @@ export default function AssetAllocationCard() {
         buckets['Real Estate'] = (buckets['Real Estate'] ?? 0) + latest.assets.realEstate
     }
   } else if (latest) {
-    // No holdings — fall back to snapshot buckets
     const a = latest.assets
-    if (a.checking + a.savings > 0) buckets['Cash']           = a.checking + a.savings
-    if (a.brokerage > 0)            buckets['Equity']         = a.brokerage
-    if (a.retirement > 0)           buckets['EPF / NPS / PPF']= a.retirement
-    if (a.realEstate > 0)           buckets['Real Estate']    = a.realEstate
-    if (a.other > 0)                buckets['Gold']           = a.other
+    if (a.checking + a.savings > 0) buckets['Cash']            = a.checking + a.savings
+    if (a.brokerage > 0)            buckets['Equity']          = a.brokerage
+    if (a.retirement > 0)           buckets['EPF / NPS / PPF'] = a.retirement
+    if (a.realEstate > 0)           buckets['Real Estate']     = a.realEstate
+    if (a.other > 0)                buckets['Gold']            = a.other
   }
 
-  // Always include all 7 categories — zero ones shown greyed out
-  const classes: (AssetClass & { isEmpty: boolean })[] = ALL_CLASSES.map(name => ({
-    name,
-    value:   buckets[name] ?? 0,
-    color:   ASSET_COLORS[name] ?? '#d6d3d1',
-    isEmpty: !(buckets[name] > 0),
-  })).sort((a, b) => b.value - a.value)
-
-  // Also include EPF/NPS if present (from retirement holdings)
-  if ((buckets['EPF / NPS / PPF'] ?? 0) > 0) {
-    classes.push({ name: 'EPF / NPS / PPF', value: buckets['EPF / NPS / PPF'], color: '#10b981', isEmpty: false })
+  // Group holdings by class then subType
+  const holdingsByClass: Record<string, Holding[]> = {}
+  for (const h of data.holdings) {
+    const cat = holdingClass(h);
+    (holdingsByClass[cat] = holdingsByClass[cat] ?? []).push(h)
   }
 
-  const total     = classes.reduce((a, c) => a + c.value, 0)
+  const total     = Object.values(buckets).reduce((a, b) => a + b, 0)
   const totalCost = data.holdings.reduce((a, h) => a + h.costBasis, 0)
   const gain      = total - totalCost
   const gainPct   = totalCost > 0 ? (gain / totalCost) * 100 : 0
+
+  // Always show all 7 classes + EPF if present
+  const allClasses = [
+    ...ALL_CLASSES,
+    ...(buckets['EPF / NPS / PPF'] ? ['EPF / NPS / PPF'] as const : []),
+  ]
+
+  const pieData = allClasses
+    .filter(name => (buckets[name] ?? 0) > 0)
+    .map(name => ({ name, value: buckets[name], color: ASSET_COLORS[name] ?? '#d6d3d1' }))
 
   function submit(e: React.FormEvent) {
     e.preventDefault()
     if (!form.name || !form.value) return
     addHolding({ ...form, value: parseFloat(form.value), costBasis: parseFloat(form.costBasis || form.value) })
     setForm({ name: '', ticker: '', type: 'etf', value: '', costBasis: '' })
+    setShowAddForm(false)
   }
 
-  const hasData = classes.length > 0
+  const hasAnyData = total > 0
 
   return (
     <div className="card p-5 flex flex-col gap-4">
+      {/* Header */}
       <div className="flex items-center justify-between">
-        <p className="section-title">Asset Allocation</p>
-        <button data-expand="portfolio" className="btn-ghost" onClick={() => setExpanded(v => !v)}>
-          {expanded ? <ChevronUp size={16}/> : <ChevronDown size={16}/>}
+        <div>
+          <p className="section-title">Asset Allocation</p>
+          {hasAnyData && (
+            <p className="text-xs text-surface-300 mt-0.5">{data.holdings.length} holdings</p>
+          )}
+        </div>
+        <button onClick={() => setShowAddForm(v => !v)}
+          className="btn-ghost flex items-center gap-1 text-xs">
+          <Plus size={13}/> Add
         </button>
       </div>
 
-      {!hasData && !expanded ? (
+      {/* Add form */}
+      {showAddForm && (
+        <form onSubmit={submit} className="flex flex-col gap-2 p-3 bg-surface-50 rounded-xl border border-surface-100 animate-fade-up">
+          <div className="grid grid-cols-2 gap-2">
+            <input className="input-field text-xs" placeholder="Name (e.g. Reliance)" value={form.name}
+              onChange={e => setForm(v => ({ ...v, name: e.target.value }))} />
+            <input className="input-field text-xs" placeholder="Ticker / ISIN (optional)" value={form.ticker}
+              onChange={e => setForm(v => ({ ...v, ticker: e.target.value }))} />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <input className="input-field text-xs" type="number" placeholder="Current value (₹)" value={form.value}
+              onChange={e => setForm(v => ({ ...v, value: e.target.value }))} />
+            <input className="input-field text-xs" type="number" placeholder="Cost basis (₹)" value={form.costBasis}
+              onChange={e => setForm(v => ({ ...v, costBasis: e.target.value }))} />
+          </div>
+          <select className="input-field text-xs" value={form.type}
+            onChange={e => setForm(v => ({ ...v, type: e.target.value as any }))}>
+            <option value="stock">Equity — Direct Stock</option>
+            <option value="etf">Equity — Mutual Fund / ETF</option>
+            <option value="bond">Debt / Fixed Income / Gold</option>
+            <option value="retirement">EPF / NPS / PPF</option>
+            <option value="crypto">Cryptocurrency</option>
+            <option value="cash">Cash / Liquid</option>
+          </select>
+          <div className="flex gap-2">
+            <button type="button" onClick={() => setShowAddForm(false)} className="btn-ghost flex-1 text-xs">Cancel</button>
+            <button type="submit" className="btn-primary flex-1 text-xs">Add Holding</button>
+          </div>
+        </form>
+      )}
+
+      {!hasAnyData && !showAddForm ? (
         <EmptyState
           title="No holdings recorded"
-          description="Import your CAMS statement, Zerodha holdings, or EPF passbook to see your complete asset allocation."
-          cta="Connect your portfolio"
-          onCta={() => setExpanded(true)}
+          description="Import your Zerodha XLSX or CAMS statement to see your complete asset allocation."
+          cta="Import from Zerodha"
+          onCta={() => setShowAddForm(true)}
         />
       ) : (
         <>
-          <div>
-            <p className="kpi-value">{fmtINR(total)}</p>
-            {totalCost > 0 && (
-              <p className={`text-xs font-medium mt-0.5 ${gain >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
-                {gain >= 0 ? '+' : ''}{fmtINR(gain)} ({fmtPct(gainPct)}) overall return
-              </p>
-            )}
-          </div>
+          {/* Portfolio total */}
+          {hasAnyData && (
+            <div>
+              <p className="kpi-value">{fmtINR(total)}</p>
+              {totalCost > 0 && (
+                <p className={`text-xs font-medium mt-0.5 ${gain >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
+                  {gain >= 0 ? '+' : ''}{fmtINR(gain)} ({fmtPct(gainPct)}) overall return
+                </p>
+              )}
+            </div>
+          )}
 
-          {/* Donut — only non-empty classes */}
-          {classes.some(c => !c.isEmpty) && (
-            <div className="flex gap-4 items-center">
-              <ResponsiveContainer width={100} height={100}>
+          {/* Donut + summary row */}
+          {pieData.length > 0 && (
+            <div className="flex gap-3 items-center">
+              <ResponsiveContainer width={80} height={80}>
                 <PieChart>
-                  <Pie
-                    data={classes.filter(c => !c.isEmpty)}
-                    cx="50%" cy="50%" innerRadius={28} outerRadius={44}
+                  <Pie data={pieData} cx="50%" cy="50%" innerRadius={22} outerRadius={36}
                     dataKey="value" paddingAngle={2}>
-                    {classes.filter(c => !c.isEmpty).map(c => <Cell key={c.name} fill={c.color} />)}
+                    {pieData.map(d => <Cell key={d.name} fill={d.color} />)}
                   </Pie>
-                  <Tooltip formatter={(v: any) => fmtINR(v as number)} />
+                  <Tooltip formatter={(v: any) => fmtINR(v as number)}
+                    contentStyle={{ fontSize: 11, borderRadius: 8, border: '1px solid #e7e5e4' }} />
                 </PieChart>
               </ResponsiveContainer>
-
-              {/* Legend — all 7 always shown */}
-              <div className="flex flex-col gap-1 flex-1 min-w-0">
-                {classes.map(c => (
-                  <div key={c.name} className={`flex items-center gap-2 ${c.isEmpty ? 'opacity-40' : ''}`}>
-                    <span className="w-2 h-2 rounded-full shrink-0"
-                      style={{ backgroundColor: c.isEmpty ? '#e7e5e4' : c.color }} />
-                    <span className="text-xs truncate flex-1 text-surface-700">{c.name}</span>
-                    {c.isEmpty ? (
-                      <span className="text-[10px] text-surface-300 italic shrink-0">not added</span>
-                    ) : (
-                      <>
-                        <span className="text-xs font-semibold font-mono text-surface-800 shrink-0">{fmtINR(c.value)}</span>
-                        <span className="text-[10px] text-surface-300 w-8 text-right shrink-0">
-                          {total > 0 ? `${((c.value / total) * 100).toFixed(0)}%` : '—'}
-                        </span>
-                      </>
-                    )}
-                  </div>
+              <div className="flex flex-wrap gap-x-3 gap-y-1">
+                {pieData.map(d => (
+                  <span key={d.name} className="flex items-center gap-1 text-[10px] text-surface-600">
+                    <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: d.color }}/>
+                    {d.name} {total > 0 ? `${((d.value / total) * 100).toFixed(0)}%` : ''}
+                  </span>
                 ))}
               </div>
             </div>
           )}
 
-          {/* When all empty, show full placeholder grid */}
-          {classes.every(c => c.isEmpty) && (
-            <div className="flex flex-col gap-1.5">
-              {classes.map(c => (
-                <div key={c.name} className="flex items-center gap-2 opacity-50">
-                  <span className="w-2 h-2 rounded-full shrink-0 bg-surface-200" />
-                  <span className="text-xs text-surface-500 flex-1">{c.name}</span>
-                  <span className="text-[10px] text-surface-300 italic">{CLASS_HINTS[c.name]?.split(' \u2014')[0]}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </>
-      )}
+          {/* Full class breakdown — always visible */}
+          <div className="flex flex-col divide-y divide-surface-50">
+            {allClasses.map(cls => {
+              const value    = buckets[cls] ?? 0
+              const isEmpty  = value === 0
+              const holdings = holdingsByClass[cls] ?? []
+              const clsCost  = holdings.reduce((a, h) => a + h.costBasis, 0)
+              const clsGain  = value - clsCost
+              const isOpen   = expandedClass === cls
 
-      {expanded && (
-        <div className="flex flex-col gap-4 pt-3 border-t border-surface-100 animate-fade-up">
-          <form onSubmit={submit} className="flex flex-col gap-2">
-            <p className="text-xs font-semibold text-surface-300 uppercase tracking-widest">Add Holding</p>
-            <div className="grid grid-cols-2 gap-2">
-              <input className="input-field" placeholder="Name (e.g. VTSAX)" value={form.name}
-                onChange={e => setForm(v => ({ ...v, name: e.target.value }))} />
-              <input className="input-field" placeholder="Ticker (optional)" value={form.ticker}
-                onChange={e => setForm(v => ({ ...v, ticker: e.target.value }))} />
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <input className="input-field" type="number" placeholder="Current value (₹)" value={form.value}
-                onChange={e => setForm(v => ({ ...v, value: e.target.value }))} />
-              <input className="input-field" type="number" placeholder="Cost basis (₹)" value={form.costBasis}
-                onChange={e => setForm(v => ({ ...v, costBasis: e.target.value }))} />
-            </div>
-            <select className="input-field" value={form.type}
-              onChange={e => setForm(v => ({ ...v, type: e.target.value as any }))}>
-              {(['stock', 'etf', 'bond', 'retirement', 'crypto', 'cash'] as const).map(t => (
-                <option key={t} value={t}>{
-                  t === 'stock' ? 'Equity / Direct Stocks' :
-                  t === 'etf'   ? 'Mutual Fund / ETF / Index Fund' :
-                  t === 'bond'  ? 'Fixed Income / FD / Bond' :
-                  t === 'retirement' ? 'EPF / NPS / PPF' :
-                  t === 'crypto'? 'Crypto / Digital Assets' : 'Cash / Liquid'
-                }</option>
-              ))}
-            </select>
-            <button type="submit" className="btn-primary flex items-center gap-1 justify-center">
-              <Plus size={14}/> Add
-            </button>
-          </form>
+              return (
+                <div key={cls}>
+                  {/* Class row */}
+                  <div
+                    className={`flex items-center gap-3 py-2.5 cursor-pointer hover:bg-surface-50/60 rounded-lg px-1 -mx-1 transition-colors
+                      ${isEmpty ? 'opacity-50' : ''}`}
+                    onClick={() => !isEmpty && setExpandedClass(isOpen ? null : cls)}>
+                    <span className="w-2.5 h-2.5 rounded-full shrink-0"
+                      style={{ backgroundColor: isEmpty ? '#e7e5e4' : ASSET_COLORS[cls] ?? '#d6d3d1' }} />
+                    <span className="text-sm font-semibold text-surface-800 flex-1">{cls}</span>
 
-          {data.holdings.length > 0 && (
-            <div className="max-h-48 overflow-y-auto flex flex-col gap-1">
-              {data.holdings.map(h => (
-                <div key={h.id} className="flex justify-between items-center text-xs py-1.5 border-b border-surface-50 group">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="font-medium text-surface-800 truncate">{h.name}</span>
-                    {h.ticker && <span className="text-surface-300 font-mono text-[10px] shrink-0">{h.ticker}</span>}
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <div className="text-right">
-                      <div className="font-medium text-surface-800">{fmtINR(h.value)}</div>
-                      <div className={`text-[10px] ${h.value >= h.costBasis ? 'text-emerald-600' : 'text-rose-500'}`}>
-                        {fmtPct(((h.value - h.costBasis) / Math.max(h.costBasis, 1)) * 100)}
+                    {isEmpty ? (
+                      <span className="text-[10px] text-surface-300 italic">not added</span>
+                    ) : (
+                      <div className="flex items-center gap-3 shrink-0">
+                        {clsCost > 0 && (
+                          <span className={`text-[10px] font-medium ${clsGain >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
+                            {clsGain >= 0 ? '+' : ''}{fmtPct((clsGain / clsCost) * 100)}
+                          </span>
+                        )}
+                        <span className="text-sm font-semibold font-mono text-surface-800">{fmtINR(value)}</span>
+                        <span className="text-[10px] text-surface-300 w-7 text-right">
+                          {total > 0 ? `${((value / total) * 100).toFixed(0)}%` : ''}
+                        </span>
+                        {holdings.length > 0 && (
+                          isOpen
+                            ? <ChevronDown size={13} className="text-surface-400"/>
+                            : <ChevronRight size={13} className="text-surface-400"/>
+                        )}
                       </div>
-                    </div>
-                    <button onClick={() => deleteHolding(h.id)}
-                      className="opacity-0 group-hover:opacity-100 text-surface-300 hover:text-rose-400 transition-all ml-1">
-                      <Trash2 size={12}/>
-                    </button>
+                    )}
                   </div>
+
+                  {/* Holdings drill-down */}
+                  {isOpen && holdings.length > 0 && (
+                    <div className="ml-5 mb-2 flex flex-col gap-0.5 animate-fade-up">
+                      {/* Sub-type groups */}
+                      {(() => {
+                        const bySubType: Record<string, Holding[]> = {}
+                        holdings.forEach(h => {
+                          const sub = holdingSubType(h);
+                          (bySubType[sub] = bySubType[sub] ?? []).push(h)
+                        })
+                        return Object.entries(bySubType).map(([sub, items]) => (
+                          <div key={sub} className="flex flex-col">
+                            <p className="text-[9px] uppercase tracking-widest font-semibold text-surface-300 mt-2 mb-1">{sub}</p>
+                            {items
+                              .sort((a, b) => b.value - a.value)
+                              .map(h => {
+                                const ret = h.costBasis > 0 ? ((h.value - h.costBasis) / h.costBasis) * 100 : 0
+                                return (
+                                  <div key={h.id} className="flex items-center gap-2 py-1.5 border-b border-surface-50 group">
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-xs font-medium text-surface-800 truncate">{h.name}</p>
+                                      {h.ticker && <p className="text-[10px] text-surface-300 font-mono truncate">{h.ticker}</p>}
+                                    </div>
+                                    <div className="text-right shrink-0">
+                                      <p className="text-xs font-semibold font-mono text-surface-800">{fmtINR(h.value)}</p>
+                                      {h.costBasis > 0 && (
+                                        <p className={`text-[10px] font-medium ${ret >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
+                                          {ret >= 0 ? '+' : ''}{ret.toFixed(1)}%
+                                        </p>
+                                      )}
+                                    </div>
+                                    <button onClick={() => deleteHolding(h.id)}
+                                      className="opacity-0 group-hover:opacity-100 text-surface-300 hover:text-rose-400 transition-all ml-1">
+                                      <Trash2 size={11}/>
+                                    </button>
+                                  </div>
+                                )
+                              })}
+                          </div>
+                        ))
+                      })()}
+                    </div>
+                  )}
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
+              )
+            })}
+          </div>
+        </>
       )}
     </div>
   )
