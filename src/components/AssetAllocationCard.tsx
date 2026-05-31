@@ -17,7 +17,19 @@ const ASSET_COLORS: Record<string, string> = {
   'Other':          '#d6d3d1',
 }
 
+const ALL_CLASSES = ['Equity', 'Debt', 'Gold', 'International', 'Cryptocurrency', 'Real Estate', 'Cash'] as const
+
 interface AssetClass { name: string; value: number; color: string }
+
+const CLASS_HINTS: Record<string, string> = {
+  'Equity':         'Stocks, mutual funds, ETFs — import Zerodha XLSX to populate',
+  'Debt':           'G-Secs, debt mutual funds, bonds — import Zerodha or add manually',
+  'Gold':           'Physical gold, Gold ETF, SGBs — add via portfolio or net worth',
+  'International':  'US stocks, RSUs, international funds — add Fidelity or manual',
+  'Cryptocurrency': 'BTC, ETH and other crypto — add manually',
+  'Real Estate':    'Property value — add via Net Worth snapshot',
+  'Cash':           'Savings accounts, FDs — add via Net Worth snapshot',
+}
 
 export default function AssetAllocationCard() {
   const { data, addHolding, deleteHolding } = useApp()
@@ -63,10 +75,18 @@ export default function AssetAllocationCard() {
     if (a.other > 0)                buckets['Gold']           = a.other
   }
 
-  const classes: AssetClass[] = Object.entries(buckets)
-    .filter(([, v]) => v > 0)
-    .sort(([, a], [, b]) => b - a)
-    .map(([name, value]) => ({ name, value, color: ASSET_COLORS[name] ?? '#d6d3d1' }))
+  // Always include all 7 categories — zero ones shown greyed out
+  const classes: (AssetClass & { isEmpty: boolean })[] = ALL_CLASSES.map(name => ({
+    name,
+    value:   buckets[name] ?? 0,
+    color:   ASSET_COLORS[name] ?? '#d6d3d1',
+    isEmpty: !(buckets[name] > 0),
+  })).sort((a, b) => b.value - a.value)
+
+  // Also include EPF/NPS if present (from retirement holdings)
+  if ((buckets['EPF / NPS / PPF'] ?? 0) > 0) {
+    classes.push({ name: 'EPF / NPS / PPF', value: buckets['EPF / NPS / PPF'], color: '#10b981', isEmpty: false })
+  }
 
   const total     = classes.reduce((a, c) => a + c.value, 0)
   const totalCost = data.holdings.reduce((a, h) => a + h.costBasis, 0)
@@ -109,30 +129,54 @@ export default function AssetAllocationCard() {
             )}
           </div>
 
-          {classes.length > 0 && (
+          {/* Donut — only non-empty classes */}
+          {classes.some(c => !c.isEmpty) && (
             <div className="flex gap-4 items-center">
               <ResponsiveContainer width={100} height={100}>
                 <PieChart>
-                  <Pie data={classes} cx="50%" cy="50%" innerRadius={28} outerRadius={44}
+                  <Pie
+                    data={classes.filter(c => !c.isEmpty)}
+                    cx="50%" cy="50%" innerRadius={28} outerRadius={44}
                     dataKey="value" paddingAngle={2}>
-                    {classes.map(c => <Cell key={c.name} fill={c.color} />)}
+                    {classes.filter(c => !c.isEmpty).map(c => <Cell key={c.name} fill={c.color} />)}
                   </Pie>
                   <Tooltip formatter={(v: any) => fmtINR(v as number)} />
                 </PieChart>
               </ResponsiveContainer>
 
-              <div className="flex flex-col gap-1.5 flex-1 min-w-0">
+              {/* Legend — all 7 always shown */}
+              <div className="flex flex-col gap-1 flex-1 min-w-0">
                 {classes.map(c => (
-                  <div key={c.name} className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: c.color }} />
-                    <span className="text-xs text-surface-700 truncate flex-1">{c.name}</span>
-                    <span className="text-xs font-semibold text-surface-800 font-mono shrink-0">{fmtINR(c.value)}</span>
-                    <span className="text-[10px] text-surface-300 w-8 text-right shrink-0">
-                      {total > 0 ? `${((c.value / total) * 100).toFixed(0)}%` : '—'}
-                    </span>
+                  <div key={c.name} className={`flex items-center gap-2 ${c.isEmpty ? 'opacity-40' : ''}`}>
+                    <span className="w-2 h-2 rounded-full shrink-0"
+                      style={{ backgroundColor: c.isEmpty ? '#e7e5e4' : c.color }} />
+                    <span className="text-xs truncate flex-1 text-surface-700">{c.name}</span>
+                    {c.isEmpty ? (
+                      <span className="text-[10px] text-surface-300 italic shrink-0">not added</span>
+                    ) : (
+                      <>
+                        <span className="text-xs font-semibold font-mono text-surface-800 shrink-0">{fmtINR(c.value)}</span>
+                        <span className="text-[10px] text-surface-300 w-8 text-right shrink-0">
+                          {total > 0 ? `${((c.value / total) * 100).toFixed(0)}%` : '—'}
+                        </span>
+                      </>
+                    )}
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* When all empty, show full placeholder grid */}
+          {classes.every(c => c.isEmpty) && (
+            <div className="flex flex-col gap-1.5">
+              {classes.map(c => (
+                <div key={c.name} className="flex items-center gap-2 opacity-50">
+                  <span className="w-2 h-2 rounded-full shrink-0 bg-surface-200" />
+                  <span className="text-xs text-surface-500 flex-1">{c.name}</span>
+                  <span className="text-[10px] text-surface-300 italic">{CLASS_HINTS[c.name]?.split(' \u2014')[0]}</span>
+                </div>
+              ))}
             </div>
           )}
         </>
