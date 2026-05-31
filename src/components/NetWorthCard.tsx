@@ -37,14 +37,19 @@ export default function NetWorthCard() {
   }
 
   const assetFields = [
-    { key: 'checking', label: 'Checking' }, { key: 'savings', label: 'Savings' },
-    { key: 'brokerage', label: 'Brokerage' }, { key: 'retirement', label: '401k / IRA' },
-    { key: 'realEstate', label: 'Real Estate' }, { key: 'other', label: 'Other' },
+    { key: 'checking',   label: 'Cash & Savings Account',  hint: 'Total balance across all savings/current accounts' },
+    { key: 'savings',    label: 'Fixed Deposits (FD / RD)',  hint: 'Bank FDs, recurring deposits, liquid funds' },
+    { key: 'brokerage',  label: 'Mutual Funds & Stocks',    hint: 'Equity MFs, direct stocks, ETFs — current value' },
+    { key: 'retirement', label: 'EPF / NPS / PPF',           hint: 'Employee provident fund, NPS balance, PPF' },
+    { key: 'realEstate', label: 'Real Estate',               hint: 'Market value of property you own' },
+    { key: 'other',      label: 'Gold, SGBs & Other',        hint: 'Physical gold, sovereign gold bonds, crypto, other' },
   ]
   const liabFields = [
-    { key: 'mortgage', label: 'Mortgage' }, { key: 'studentLoans', label: 'Student Loans' },
-    { key: 'creditCards', label: 'Credit Cards' }, { key: 'autoLoans', label: 'Auto Loans' },
-    { key: 'other', label: 'Other Debt' },
+    { key: 'mortgage',     label: 'Home Loan',                hint: 'Outstanding principal on home/property loan' },
+    { key: 'autoLoans',   label: 'Car / Vehicle Loan',       hint: 'Outstanding balance on vehicle loans' },
+    { key: 'studentLoans',label: 'Education Loan',           hint: 'Outstanding education loan balance' },
+    { key: 'creditCards', label: 'Credit Card Outstanding',  hint: 'Total unpaid credit card balance' },
+    { key: 'other',       label: 'Personal Loan & Other',    hint: 'Personal loans, buy-now-pay-later, other debt' },
   ]
 
   return (
@@ -83,9 +88,10 @@ export default function NetWorthCard() {
             <div>
               <p className="text-xs font-semibold text-emerald-600 uppercase tracking-widest mb-2">Assets</p>
               <div className="grid grid-cols-2 gap-2">
-                {assetFields.map(({ key, label }) => (
+                {assetFields.map(({ key, label, hint }) => (
                   <div key={key}>
-                    <label className="text-[10px] text-surface-300 font-medium">{label}</label>
+                    <label className="text-[10px] text-surface-700 font-semibold block">{label}</label>
+                    <p className="text-[9px] text-surface-300 mb-0.5">{hint}</p>
                     <input
                       className="input-field mt-0.5" type="number" placeholder="0"
                       value={(assets as any)[key] || ''}
@@ -99,9 +105,10 @@ export default function NetWorthCard() {
             <div>
               <p className="text-xs font-semibold text-rose-500 uppercase tracking-widest mb-2">Liabilities</p>
               <div className="grid grid-cols-2 gap-2">
-                {liabFields.map(({ key, label }) => (
+                {liabFields.map(({ key, label, hint }) => (
                   <div key={key}>
-                    <label className="text-[10px] text-surface-300 font-medium">{label}</label>
+                    <label className="text-[10px] text-surface-700 font-semibold block">{label}</label>
+                    <p className="text-[9px] text-surface-300 mb-0.5">{hint}</p>
                     <input
                       className="input-field mt-0.5" type="number" placeholder="0"
                       value={(liab as any)[key] || ''}

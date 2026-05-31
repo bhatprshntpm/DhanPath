@@ -6,15 +6,19 @@ import { fmtINR, fmtPct } from '../lib/calc'
 import EmptyState from './EmptyState'
 
 const ASSET_COLORS: Record<string, string> = {
-  'Equity':     '#f59e0b',
-  'Mutual Funds':'#6366f1',
-  'Retirement': '#10b981',
-  'Real Estate':'#8b5cf6',
-  'Cash':       '#a8a29e',
-  'Fixed Income':'#3b82f6',
-  'Gold':       '#f97316',
-  'Crypto':     '#ec4899',
-  'Other':      '#d6d3d1',
+  'Mutual Funds & Stocks': '#f59e0b',
+  'Equity':                '#f59e0b',
+  'Mutual Funds':          '#6366f1',
+  'EPF / NPS / PPF':       '#10b981',
+  'Retirement':            '#10b981',
+  'Real Estate':           '#8b5cf6',
+  'Cash & Deposits':       '#a8a29e',
+  'Cash':                  '#a8a29e',
+  'Fixed Income':          '#3b82f6',
+  'Gold & Other':          '#f97316',
+  'Gold':                  '#f97316',
+  'Crypto':                '#ec4899',
+  'Other':                 '#d6d3d1',
 }
 
 interface AssetClass { name: string; value: number; color: string }
@@ -34,10 +38,11 @@ export default function AssetAllocationCard() {
   // From net worth snapshot
   if (latest) {
     const a = latest.assets
-    if (a.checking + a.savings > 0)     buckets['Cash']        = (buckets['Cash']        ?? 0) + a.checking + a.savings
-    if (a.brokerage > 0)                buckets['Equity']      = (buckets['Equity']      ?? 0) + a.brokerage
-    if (a.retirement > 0)               buckets['Retirement']  = (buckets['Retirement']  ?? 0) + a.retirement
-    if (a.realEstate > 0)               buckets['Real Estate'] = (buckets['Real Estate'] ?? 0) + a.realEstate
+    if (a.checking + a.savings > 0)  buckets['Cash & Deposits']  = (buckets['Cash & Deposits']  ?? 0) + a.checking + a.savings
+    if (a.brokerage > 0)              buckets['Mutual Funds & Stocks'] = (buckets['Mutual Funds & Stocks'] ?? 0) + a.brokerage
+    if (a.retirement > 0)             buckets['EPF / NPS / PPF']  = (buckets['EPF / NPS / PPF']  ?? 0) + a.retirement
+    if (a.realEstate > 0)             buckets['Real Estate']       = (buckets['Real Estate']       ?? 0) + a.realEstate
+    if (a.other > 0)                  buckets['Gold & Other']      = (buckets['Gold & Other']      ?? 0) + a.other
     if (a.other > 0)                    buckets['Other']       = (buckets['Other']       ?? 0) + a.other
   }
 
@@ -154,11 +159,11 @@ export default function AssetAllocationCard() {
               onChange={e => setForm(v => ({ ...v, type: e.target.value as any }))}>
               {(['stock', 'etf', 'bond', 'retirement', 'crypto', 'cash'] as const).map(t => (
                 <option key={t} value={t}>{
-                  t === 'stock' ? 'Equity / Stock' :
-                  t === 'etf'   ? 'Mutual Fund / ETF' :
-                  t === 'bond'  ? 'Fixed Income / Bond / FD' :
-                  t === 'retirement' ? 'EPF / NPS / Retirement' :
-                  t === 'crypto'? 'Crypto' : 'Cash'
+                  t === 'stock' ? 'Equity / Direct Stocks' :
+                  t === 'etf'   ? 'Mutual Fund / ETF / Index Fund' :
+                  t === 'bond'  ? 'Fixed Income / FD / Bond' :
+                  t === 'retirement' ? 'EPF / NPS / PPF' :
+                  t === 'crypto'? 'Crypto / Digital Assets' : 'Cash / Liquid'
                 }</option>
               ))}
             </select>
