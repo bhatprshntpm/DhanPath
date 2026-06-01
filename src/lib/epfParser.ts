@@ -195,3 +195,37 @@ export function epfToHolding(result: EPFParseResult): import('../types').Holding
     costBasis: result.employeeBalance,
   }
 }
+
+// Returns one snapshot per contribution month — enables historical sparkline
+export function epfToMonthlySnapshots(result: EPFParseResult): Omit<NetWorthSnapshot, 'id'>[] {
+  if (!result.entries.length) return []
+
+  // Derive opening balance by subtracting all contributions from closing
+  const totalEEContrib = result.entries.reduce((a, e) => a + e.employeeShare, 0)
+  const totalERContrib = result.entries.reduce((a, e) => a + e.employerShare, 0)
+  const totalPSContrib = result.entries.reduce((a, e) => a + e.pensionShare, 0)
+
+  let eeRunning = result.employeeBalance - totalEEContrib
+  let erRunning = result.employerBalance - totalERContrib
+  let psRunning = result.pensionBalance  - totalPSContrib
+
+  const snapshots: Omit<NetWorthSnapshot, 'id'>[] = []
+
+  for (const entry of result.entries) {
+    eeRunning += entry.employeeShare
+    erRunning += entry.employerShare
+    psRunning += entry.pensionShare
+
+    snapshots.push({
+      date: entry.month,
+      assets: {
+        checking: 0, savings: 0, brokerage: 0,
+        retirement: Math.round(eeRunning + erRunning + psRunning),
+        realEstate: 0, other: 0,
+      },
+      liabilities: { mortgage: 0, studentLoans: 0, creditCards: 0, autoLoans: 0, other: 0 },
+    })
+  }
+
+  return snapshots
+}

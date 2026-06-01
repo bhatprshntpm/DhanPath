@@ -84,6 +84,12 @@ export default function HeroSection() {
   const cf       = monthlyCashFlow(transactions, thisMonth)
   const savingsRate = cf.income > 0 ? Math.round((cf.net / cf.income) * 100) : 0
 
+  const firstSnapshot = sorted.at(0)
+  const nwFirst       = firstSnapshot ? netWorth(firstSnapshot) : 0
+  const sinceFirst    = nwFirst > 0 ? nwNow - nwFirst : 0
+  const sinceFirstPct = nwFirst > 0 ? ((sinceFirst / nwFirst) * 100) : 0
+  const firstDate     = firstSnapshot?.date ?? ''
+
   const fireTarget = fireNumber(settings.monthlyExpenses, settings.safeWithdrawalRate)
   const firePct    = fireTarget > 0 ? Math.min(Math.round((nwNow / fireTarget) * 100), 100) : 0
 
@@ -109,6 +115,11 @@ export default function HeroSection() {
               {ytdChange !== 0 && nwYearAgo > 0 && (
                 <span className="text-sm text-surface-400">
                   {ytdChange >= 0 ? '+' : ''}{fmtINR(ytdChange)} past 12 months
+                </span>
+              )}
+              {sinceFirst > 0 && sorted.length > 2 && firstDate < (yearAgo?.date ?? '') && (
+                <span className="text-sm text-surface-400">
+                  {sinceFirst >= 0 ? '+' : ''}{fmtINR(sinceFirst)} ({sinceFirstPct.toFixed(0)}%) since {new Date(firstDate + '-01').toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}
                 </span>
               )}
             </div>
