@@ -55,11 +55,6 @@ function parseEPFDate(s: string): string {
   return ''
 }
 
-function cleanNum(s: string): number {
-  if (!s) return 0
-  return parseFloat(s.replace(/[,\s]/g, '')) || 0
-}
-
 export async function parseEPFPDF(file: File, password?: string): Promise<EPFParseResult> {
   let pages: string[]
   try {
@@ -72,82 +67,82 @@ export async function parseEPFPDF(file: File, password?: string): Promise<EPFPar
   }
 
   const fullText = pages.join('\n')
-  const uanMatch = fullText.match(/UAN\s*[:\-]?\s*(\d{12})/i)
+  const clean    = fullText.replace(/,/g, '')
+
+  // ── UAN (12-digit number after UAN label, or standalone) ──────────────────
+  const uanMatch = clean.match(/\b(10\d{10})\b/)
   const uan      = uanMatch?.[1] ?? ''
 
-  // Extract PAN
-  const panMatch = fullText.match(/\b([A-Z]{5}[0-9]{4}[A-Z])\b/)
-  const pan      = panMatch?.[1] ?? ''
+  // ── Member & establishment from PYKRP pattern (EPFO member ID / Name) ─────
+  const memberMatch = fullText.match(/[A-Z]{5}\d+\s*\/\s*([A-Z][A-Z\s]+)[\n\r]/)
+  const memberName  = memberMatch?.[1]?.trim() ?? ''
+  const estMatch    = fullText.match(/([A-Z]{5}\d+)\s*\/\s*([A-Z][A-Z\s&.,()-]+)[\n\r]/)
+  const establishmentName = estMatch?.[2]?.trim() ?? ''
+  const pan = fullText.match(/\b([A-Z]{5}[0-9]{4}[A-Z])\b/)?.[1] ?? ''
 
-  // Extract member name
-  const nameMatch  = fullText.match(/(?:Member\s+Name|Name)\s*[:\-]\s*([A-Z][A-Z\s]{2,50})/i)
-  const memberName = nameMatch?.[1]?.trim() ?? ''
+  // ── Closing balances: last 3 numbers ≥1000 before "End Of Statement" ──────
+  // EPFO passbook structure: after "Closing Balance as on DD/MM/YYYY" the last
+  // three large numbers are always Employee / Employer / Pension balances.
+  let employeeBalance = 0, employerBalance = 0, pensionBalance = 0
 
-  // Extract establishment name
-  const estMatch          = fullText.match(/(?:Establishment|Company|Employer)\s*[:\-]\s*([A-Z][A-Z\s&.,()-]{2,80})/i)
-  const establishmentName = estMatch?.[1]?.trim() ?? ''
+  const endOfStatementIdx = clean.indexOf('End Of Statement')
+  const closingIdx        = clean.indexOf('Closing Balance as on')
 
-  // Extract total balance — look for "Total Balance" or "Closing Balance"
-  const balMatch       = fullText.replace(/,/g, '').match(/(?:Total\s+(?:Closing\s+)?Balance|Balance\s+as\s+on)[^\d]*([\d]+(?:\.[\d]+)?)/i)
-  const totalBalance   = balMatch ? parseFloat(balMatch[1]) : 0
-
-  // Parse monthly entries — EPFO passbook typically has:
-  // Month | Emp Share | Employer Share | Pension | Interest | Closing Balance
-  const entries: EPFMonthlyEntry[] = []
-
-  const clean = fullText.replace(/,/g, '')
-
-  // Pattern: Month-Year followed by amounts
-  // e.g. "Apr-2023  5000.00  2165.00  1285.00  0.00  150000.00"
-  const rowPattern = /([A-Z]{3}[\/\-\s]\d{4})\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)/gi
-  let m: RegExpExecArray | null
-
-  while ((m = rowPattern.exec(clean)) !== null) {
-    const month = parseEPFDate(m[1])
-    if (!month) continue
-    entries.push({
-      month,
-      employeeShare:  parseFloat(m[2]),
-      employerShare:  parseFloat(m[3]),
-      pensionShare:   parseFloat(m[4]),
-      interest:       parseFloat(m[5]),
-      closingBalance: parseFloat(m[6]),
-    })
+  if (closingIdx !== -1) {
+    const end     = endOfStatementIdx > closingIdx ? endOfStatementIdx : clean.length
+    const section = clean.slice(closingIdx, end)
+    const nums    = (section.match(/\b\d{4,}\b/g) ?? []).map(Number).filter(n => n >= 1000)
+    if (nums.length >= 3) {
+      // Last 3 large numbers = Employee / Employer / Pension
+      employeeBalance = nums[nums.length - 3]
+      employerBalance = nums[nums.length - 2]
+      pensionBalance  = nums[nums.length - 1]
+    } else if (nums.length > 0) {
+      employeeBalance = nums[nums.length - 1]
+    }
   }
 
-  // Also try simpler pattern if above finds nothing
-  if (!entries.length) {
-    const simplePattern = /([A-Z]{3}[\/\-]\d{4})[^\d]*([\d,]+\.?\d*)/gi
-    while ((m = simplePattern.exec(clean)) !== null) {
-      const month = parseEPFDate(m[1])
-      const amt   = cleanNum(m[2])
-      if (month && amt > 0) {
-        entries.push({ month, employeeShare: amt, employerShare: 0, pensionShare: 0, interest: 0, closingBalance: amt })
-      }
+  const totalBalance = employeeBalance + employerBalance + pensionBalance
+
+  // ── Monthly entries: extract month-year patterns and associated contributions
+  const entries: EPFMonthlyEntry[] = []
+  const monthMatches = [...clean.matchAll(/([A-Z]{3}[-\/]\d{4})/gi)]
+  const seenMonths = new Set<string>()
+
+  for (const mm of monthMatches) {
+    const month = parseEPFDate(mm[1])
+    if (!month || seenMonths.has(month)) continue
+    seenMonths.add(month)
+
+    // Look for numbers in the 200 characters after this month mention
+    const after = clean.slice(mm.index! + mm[0].length, mm.index! + mm[0].length + 300)
+    const nums  = (after.match(/\b\d+\b/g) ?? []).map(Number).filter(n => n > 0 && n < 10_000_000)
+
+    if (nums.length > 0) {
+      entries.push({
+        month,
+        employeeShare:  nums[0] ?? 0,
+        employerShare:  nums[1] ?? 0,
+        pensionShare:   nums[2] ?? 0,
+        interest:       0,
+        closingBalance: nums[nums.length - 1] ?? 0,
+      })
     }
   }
 
   const sorted = [...entries].sort((a, b) => a.month.localeCompare(b.month))
 
-  // Derive balances from last entry if total not found
-  const lastEntry        = sorted[sorted.length - 1]
-  const derivedTotal     = lastEntry?.closingBalance ?? totalBalance
-  const employeeBalance  = sorted.reduce((a, e) => a + e.employeeShare, 0)
-  const employerBalance  = sorted.reduce((a, e) => a + e.employerShare, 0)
-  const pensionBalance   = sorted.reduce((a, e) => a + e.pensionShare, 0)
-
-  if (!sorted.length && derivedTotal === 0) {
-    return { status: 'no_data', message: 'Could not extract EPF data. Ensure this is an EPFO passbook PDF.', uan, pan, memberName, establishmentName, totalBalance: 0, employeeBalance: 0, employerBalance: 0, pensionBalance: 0, entries: [] }
+  if (totalBalance === 0 && !sorted.length) {
+    return { status: 'no_data', message: 'Could not extract EPF balance. Try entering manually below.',
+      uan, pan, memberName, establishmentName, totalBalance: 0,
+      employeeBalance: 0, employerBalance: 0, pensionBalance: 0, entries: [] }
   }
 
   return {
-    status: 'success',
-    message: `Found ${sorted.length} months of EPF history`,
+    status:  'success',
+    message: `EPF balance extracted · ${sorted.length} months of history`,
     uan, pan, memberName, establishmentName,
-    totalBalance: derivedTotal,
-    employeeBalance,
-    employerBalance,
-    pensionBalance,
+    totalBalance, employeeBalance, employerBalance, pensionBalance,
     entries: sorted,
   }
 }
