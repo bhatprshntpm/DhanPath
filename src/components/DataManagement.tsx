@@ -355,7 +355,8 @@ function FidelityTab() {
 
 // ─── EPF import tab ──────────────────────────────────────────────────────────
 function EPFTab() {
-  const { addSnapshot, addTransaction, upsertHoldings, addOrUpdateSnapshot } = useApp()
+  const { data, addSnapshot, addTransaction, upsertHoldings, addOrUpdateSnapshot, deleteHolding } = useApp()
+  const epfHoldings = data.holdings.filter(h => h.subType === 'EPF')
   const fileRef = useRef<HTMLInputElement>(null)
   const [parsing,  setParsing]  = useState(false)
   const [result,   setResult]   = useState<EPFParseResult | null>(null)
@@ -403,6 +404,19 @@ function EPFTab() {
 
   return (
     <div className="flex flex-col gap-4">
+      {epfHoldings.length > 0 && (
+        <div className="flex items-center justify-between px-3 py-2 bg-surface-50 rounded-xl border border-surface-100">
+          <div>
+            <p className="text-xs font-semibold text-surface-600">EPF saved — {fmtINR(epfHoldings.reduce((a, h) => a + h.value, 0))}</p>
+            <p className="text-[10px] text-surface-400">{epfHoldings[0]?.ticker !== 'EPF-MANUAL' ? `UAN ${epfHoldings[0]?.ticker}` : 'Manual entry'}</p>
+          </div>
+          <button
+            onClick={() => epfHoldings.forEach(h => deleteHolding(h.id))}
+            className="text-[11px] px-2.5 py-1 rounded-lg border border-surface-200 text-surface-400 hover:text-rose-500 hover:border-rose-200 transition-colors">
+            Clear
+          </button>
+        </div>
+      )}
       <div className="bg-orange-500/5 border border-orange-500/20 rounded-xl p-4 text-xs text-surface-700 flex flex-col gap-1.5">
         <p className="font-semibold text-surface-800">How to get your EPF passbook</p>
         <p>1. Log in to <strong>passbook.epfindia.gov.in</strong></p>
