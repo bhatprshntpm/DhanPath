@@ -16,6 +16,7 @@ export interface NetWorthSnapshot {
     autoLoans: number
     other: number
   }
+  breakdown?: Partial<Record<string, number>>  // per asset class: { Equity, Debt, Gold, ... }
 }
 
 export interface Transaction {

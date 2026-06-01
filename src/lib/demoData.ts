@@ -8,7 +8,7 @@ export function isDemoMode(): boolean {
 }
 export function clearDemoMode(): void {
   localStorage.removeItem(DEMO_FLAG)
-  localStorage.removeItem(ONBOARD_KEY)
+  localStorage.setItem(ONBOARD_KEY, '1')  // mark onboarded so demo never re-triggers
 }
 export function setDemoMode(): void {
   localStorage.setItem(DEMO_FLAG, '1')

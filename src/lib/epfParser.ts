@@ -215,15 +215,17 @@ export function epfToMonthlySnapshots(result: EPFParseResult): Omit<NetWorthSnap
     eeRunning += entry.employeeShare
     erRunning += entry.employerShare
     psRunning += entry.pensionShare
+    const epfTotal = Math.round(eeRunning + erRunning + psRunning)
 
     snapshots.push({
       date: entry.month,
       assets: {
         checking: 0, savings: 0, brokerage: 0,
-        retirement: Math.round(eeRunning + erRunning + psRunning),
+        retirement: epfTotal,
         realEstate: 0, other: 0,
       },
       liabilities: { mortgage: 0, studentLoans: 0, creditCards: 0, autoLoans: 0, other: 0 },
+      breakdown: { 'EPF / NPS / PPF': epfTotal },
     })
   }
 

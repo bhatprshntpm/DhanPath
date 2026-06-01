@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChevronDown, ChevronRight, Plus, Trash2, RefreshCw } from 'lucide-react'
+import { ChevronDown, ChevronRight, Plus, Trash2, RefreshCw, AlertTriangle } from 'lucide-react'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
 import { useApp } from '../context/AppContext'
 import { fmtINR, fmtPct } from '../lib/calc'
@@ -14,12 +14,12 @@ const ASSET_COLORS: Record<string, string> = {
   'International':  '#8b5cf6',
   'Cryptocurrency': '#ec4899',
   'Real Estate':    '#10b981',
-  'Cash':           '#a8a29e',
+  'Cash & Savings': '#a8a29e',
   'EPF / NPS / PPF':'#6366f1',
   'Other':          '#d6d3d1',
 }
 
-const ALL_CLASSES = ['Equity', 'Debt', 'Gold', 'International', 'Cryptocurrency', 'Real Estate', 'Cash'] as const
+const ALL_CLASSES = ['Equity', 'Debt', 'Gold', 'International', 'Cryptocurrency', 'Real Estate', 'Cash & Savings'] as const
 
 // Hints shown in empty state — used via CLASS_HINTS[name] when value === 0
 export const CLASS_HINTS: Record<string, string> = {
@@ -29,7 +29,7 @@ export const CLASS_HINTS: Record<string, string> = {
   'International':  'US stocks, RSUs, international funds — add Fidelity or manual',
   'Cryptocurrency': 'BTC, ETH and other crypto — add manually',
   'Real Estate':    'Property value — add via Net Worth snapshot',
-  'Cash':           'Savings accounts, FDs — add via Net Worth snapshot',
+  'Cash & Savings': 'Savings & current accounts — add via Net Worth snapshot',
 }
 
 function holdingClass(h: Holding): string {
@@ -39,7 +39,7 @@ function holdingClass(h: Holding): string {
   if (h.type === 'bond')       return 'Debt'
   if (h.type === 'retirement') return 'EPF / NPS / PPF'
   if (h.type === 'crypto')     return 'Cryptocurrency'
-  if (h.type === 'cash')       return 'Cash'
+  if (h.type === 'cash')       return 'Cash & Savings'
   return 'Other'
 }
 
@@ -75,13 +75,13 @@ export default function AssetAllocationCard() {
     }
     if (latest) {
       if (latest.assets.checking + latest.assets.savings > 0)
-        buckets['Cash'] = (buckets['Cash'] ?? 0) + latest.assets.checking + latest.assets.savings
+        buckets['Cash & Savings'] = (buckets['Cash & Savings'] ?? 0) + latest.assets.checking + latest.assets.savings
       if (latest.assets.realEstate > 0)
         buckets['Real Estate'] = (buckets['Real Estate'] ?? 0) + latest.assets.realEstate
     }
   } else if (latest) {
     const a = latest.assets
-    if (a.checking + a.savings > 0) buckets['Cash']            = a.checking + a.savings
+    if (a.checking + a.savings > 0) buckets['Cash & Savings']            = a.checking + a.savings
     if (a.brokerage > 0)            buckets['Equity']          = a.brokerage
     if (a.retirement > 0)           buckets['EPF / NPS / PPF'] = a.retirement
     if (a.realEstate > 0)           buckets['Real Estate']     = a.realEstate
@@ -105,6 +105,13 @@ export default function AssetAllocationCard() {
     ...ALL_CLASSES,
     ...(buckets['EPF / NPS / PPF'] ? ['EPF / NPS / PPF'] as const : []),
   ]
+
+  // Idle cash alert: cash > 6× monthly expenses
+  const cashVal         = buckets['Cash & Savings'] ?? 0
+  const monthlyExpenses = data.settings?.monthlyExpenses ?? 0
+  const idleCashExcess  = cashVal > 0 && monthlyExpenses > 0 && cashVal > monthlyExpenses * 6
+    ? cashVal - monthlyExpenses * 6
+    : 0
 
   const pieData = allClasses
     .filter(name => (buckets[name] ?? 0) > 0)
@@ -174,6 +181,16 @@ export default function AssetAllocationCard() {
           Updated {refreshResult.updated} holdings
           {refreshResult.failed > 0 && ` · ${refreshResult.failed} could not be fetched (no public price)`}
         </p>
+      )}
+
+      {/* Idle cash alert */}
+      {idleCashExcess > 0 && (
+        <div className="flex items-start gap-2 px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-xl">
+          <AlertTriangle size={13} className="text-amber-500 shrink-0 mt-0.5" />
+          <p className="text-[11px] text-amber-700 leading-relaxed">
+            <span className="font-semibold">{fmtINR(idleCashExcess)} idle</span> above your 6-month emergency fund. Consider moving to a liquid debt fund (~7% vs ~3.5%).
+          </p>
+        </div>
       )}
 
       {/* Add form */}
@@ -271,7 +288,12 @@ export default function AssetAllocationCard() {
                     onClick={() => !isEmpty && setExpandedClass(isOpen ? null : cls)}>
                     <span className="w-2.5 h-2.5 rounded-full shrink-0"
                       style={{ backgroundColor: isEmpty ? '#e7e5e4' : ASSET_COLORS[cls] ?? '#d6d3d1' }} />
-                    <span className="text-sm font-semibold text-surface-800 flex-1">{cls}</span>
+                    <span className="text-sm font-semibold text-surface-800 flex-1 flex items-center gap-1.5">
+                        {cls}
+                        {cls === 'Cash & Savings' && value > 0 && (
+                          <span className="text-[9px] font-medium text-orange-500 bg-orange-50 border border-orange-200 px-1.5 py-0.5 rounded-full">~3.5% · loses to inflation</span>
+                        )}
+                      </span>
 
                     {isEmpty ? (
                       <span className="text-[10px] text-surface-300 italic">not added</span>

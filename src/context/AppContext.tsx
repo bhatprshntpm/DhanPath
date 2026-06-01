@@ -64,6 +64,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const addOrUpdateSnapshot = (s: Omit<NetWorthSnapshot, 'id'>) => {
     const existing = get().snapshots.find(x => x.date === s.date)
     if (existing) {
+      const mergedBreakdown: Record<string, number> = {}
+      for (const [k, v] of Object.entries(existing.breakdown ?? {})) {
+        if (v !== undefined) mergedBreakdown[k] = v
+      }
+      for (const [cls, val] of Object.entries(s.breakdown ?? {})) {
+        if (val !== undefined) mergedBreakdown[cls] = (mergedBreakdown[cls] ?? 0) + val
+      }
       const merged: NetWorthSnapshot = {
         ...existing,
         assets: {
@@ -75,6 +82,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           other:      s.assets.other > 0 ? s.assets.other : existing.assets.other,
         },
         liabilities: existing.liabilities,
+        breakdown:   Object.keys(mergedBreakdown).length > 0 ? mergedBreakdown : undefined,
       }
       update({ ...get(), snapshots: get().snapshots.map(x => x.id === existing.id ? merged : x) })
     } else {

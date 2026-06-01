@@ -337,6 +337,10 @@ export function zerodhaToSnapshot(parsed: ZerodhaParseResult): Omit<NetWorthSnap
   for (const h of parsed.holdings) {
     by[h.assetClass] = (by[h.assetClass] ?? 0) + h.currentValue
   }
+  const breakdown: Record<string, number> = {}
+  for (const [cls, val] of Object.entries(by)) {
+    if (val > 0) breakdown[cls] = Math.round(val)
+  }
   return {
     date: new Date().toISOString().slice(0, 7),
     assets: {
@@ -348,5 +352,6 @@ export function zerodhaToSnapshot(parsed: ZerodhaParseResult): Omit<NetWorthSnap
       other:      Math.round(by['Gold'] ?? 0),
     },
     liabilities: { mortgage: 0, studentLoans: 0, creditCards: 0, autoLoans: 0, other: 0 },
+    breakdown,
   }
 }

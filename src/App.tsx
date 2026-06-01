@@ -1,19 +1,19 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { AppProvider, useApp } from './context/AppContext'
 import Header from './components/Header'
 import OnboardingWizard from './components/OnboardingWizard'
 import DemoBanner from './components/DemoBanner'
-import BackupReminder from './components/BackupReminder'
 import HeroSection from './components/HeroSection'
 import CashFlowOverview from './components/CashFlowOverview'
 import AssetAllocationCard from './components/AssetAllocationCard'
 import LifetimeTimeline from './components/LifetimeTimeline'
+import PortfolioHistory from './components/PortfolioHistory'
 import FireHorizon from './components/FireHorizon'
 import GoalsCard from './components/GoalsCard'
 import ActionCards from './components/ActionCards'
 import CrorepatiCalc from './components/CrorepatiCalc'
 import DataManagement from './components/DataManagement'
-import { DEMO_FLAG, ONBOARD_KEY, setDemoMode, isDemoMode } from './lib/demoData'
+import { ONBOARD_KEY, isDemoMode } from './lib/demoData'
 
 function scrollTo(sectionId: string) {
   const el = document.getElementById(sectionId)
@@ -30,17 +30,8 @@ function AppContent() {
   const [demoMode,   setDemoMode_]    = useState(() => isDemoMode())
   const { loading } = useApp()
 
-  useEffect(() => {
-    const onboarded = localStorage.getItem(ONBOARD_KEY)
-    const demo      = localStorage.getItem(DEMO_FLAG)
-    if (!onboarded && !demo) {
-      setDemoMode()
-      setDemoMode_(true)
-      window.location.reload()
-    }
-  }, [])
-
   function handleUseMyData() {
+    localStorage.setItem(ONBOARD_KEY, '1')
     setDemoMode_(false)
     setWizardOpen(true)
   }
@@ -62,7 +53,6 @@ function AppContent() {
       />
       <Header onEditProfile={() => setWizardOpen(true)} />
       {demoMode && <DemoBanner onUseMyData={handleUseMyData} />}
-      <BackupReminder />
 
       <main className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-5 sm:py-8 flex flex-col gap-5 sm:gap-6">
 
@@ -75,6 +65,11 @@ function AppContent() {
           <AssetAllocationCard />
           <CashFlowOverview />
         </div>
+
+        {/* ── ACT 2b: Portfolio History ───────────────── */}
+        <section id="section-history">
+          <PortfolioHistory />
+        </section>
 
         {/* ── ACT 3: Your Future ──────────────────────────── */}
         <section id="section-timeline">
