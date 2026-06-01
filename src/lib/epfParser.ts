@@ -181,3 +181,17 @@ export function epfToTransactions(result: EPFParseResult): Omit<Transaction, 'id
       note:     `EPF — Emp: ₹${e.employeeShare} + Er: ₹${e.employerShare}`,
     }))
 }
+
+export function epfToHolding(result: EPFParseResult): import('../types').Holding {
+  return {
+    id:        Math.random().toString(36).slice(2),
+    name:      'EPF',
+    ticker:    result.uan || 'EPF',
+    type:      'retirement',
+    subType:   'EPF',
+    qty:       1,
+    lastPrice: result.totalBalance,
+    value:     result.totalBalance,
+    costBasis: result.employeeBalance,
+  }
+}

@@ -11,7 +11,7 @@ import { parseZerodhaXLSX, zerodhaToHoldings, zerodhaToSnapshot } from '../lib/z
 import type { ZerodhaParseResult } from '../lib/zerodhaXLSXParser'
 import { parseFidelityPDF, fidelityToHoldings } from '../lib/fidelityPDFParser'
 import type { FidelityParseResult } from '../lib/fidelityPDFParser'
-import { parseEPFPDF, epfToSnapshot, epfToTransactions } from '../lib/epfParser'
+import { parseEPFPDF, epfToSnapshot, epfToTransactions, epfToHolding } from '../lib/epfParser'
 import type { EPFParseResult } from '../lib/epfParser'
 import { useApp } from '../context/AppContext'
 import { DEFAULT_DATA } from '../lib/storage'
@@ -355,7 +355,7 @@ function FidelityTab() {
 
 // ─── EPF import tab ──────────────────────────────────────────────────────────
 function EPFTab() {
-  const { addSnapshot, addTransaction, addHolding } = useApp()
+  const { addSnapshot, addTransaction, upsertHoldings } = useApp()
   const fileRef = useRef<HTMLInputElement>(null)
   const [parsing,  setParsing]  = useState(false)
   const [result,   setResult]   = useState<EPFParseResult | null>(null)
@@ -385,15 +385,16 @@ function EPFTab() {
     if (!result || result.status !== 'success') return
     addSnapshot(epfToSnapshot(result))
     epfToTransactions(result).forEach(t => addTransaction(t))
+    upsertHoldings([epfToHolding(result)])  // adds to Asset Allocation + Net Worth
     setImported(true)
   }
 
   function saveManual() {
     if (!manualBal) return
-    addHolding({ name: 'EPF Balance', ticker: '', type: 'retirement', assetClass: 'Debt',
+    upsertHoldings([{ name: 'EPF', ticker: 'EPF-MANUAL', type: 'retirement',
       subType: 'EPF', qty: 1, lastPrice: parseFloat(manualBal),
       value: Math.round(parseFloat(manualBal)),
-      costBasis: Math.round(parseFloat(manualInvested || manualBal)) })
+      costBasis: Math.round(parseFloat(manualInvested || manualBal)) }])
     setManualSaved(true)
     setTimeout(() => setManualSaved(false), 2000)
   }
