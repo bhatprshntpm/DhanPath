@@ -11,6 +11,8 @@ import { parseZerodhaXLSX, zerodhaToHoldings, zerodhaToSnapshot } from '../lib/z
 import type { ZerodhaParseResult } from '../lib/zerodhaXLSXParser'
 import { parseFidelityPDF, fidelityToHoldings } from '../lib/fidelityPDFParser'
 import type { FidelityParseResult } from '../lib/fidelityPDFParser'
+import { parseEPFPDF, epfToSnapshot, epfToTransactions } from '../lib/epfParser'
+import type { EPFParseResult } from '../lib/epfParser'
 import { useApp } from '../context/AppContext'
 import { DEFAULT_DATA } from '../lib/storage'
 import { fmtINR } from '../lib/calc'
@@ -18,12 +20,15 @@ import { fmtINR } from '../lib/calc'
 const TABS = [
   { id: 'zerodha',   label: 'Zerodha Holdings' },
   { id: 'fidelity',  label: 'Fidelity / RSU'  },
+  { id: 'epf',       label: 'EPF'             },
+  { id: 'retirement',label: 'PPF / NPS'       },
+  { id: 'crypto',    label: 'Crypto'          },
   { id: 'import',    label: 'Other Sources'   },
   { id: 'networth',  label: 'Net Worth'       },
   { id: 'cashflow',  label: 'Transactions'    },
-  { id: 'debt',       label: 'Loans'            },
-  { id: 'scenarios',  label: 'Scenarios'        },
-  { id: 'sip',        label: 'SIP Calculator'   },
+  { id: 'debt',      label: 'Loans'           },
+  { id: 'scenarios', label: 'Scenarios'       },
+  { id: 'sip',       label: 'SIP Calculator'  },
 ]
 
 // ─── Zerodha XLSX import tab ──────────────────────────────────────────────────
@@ -348,6 +353,223 @@ function FidelityTab() {
   )
 }
 
+// ─── EPF import tab ──────────────────────────────────────────────────────────
+function EPFTab() {
+  const { addSnapshot, addTransaction } = useApp()
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [parsing,  setParsing]  = useState(false)
+  const [result,   setResult]   = useState<EPFParseResult | null>(null)
+  const [imported, setImported] = useState(false)
+  const [password, setPassword] = useState('')
+
+  async function handleFile(file: File | null) {
+    if (!file) return
+    setParsing(true); setResult(null); setImported(false)
+    const r = await parseEPFPDF(file, password || undefined)
+    setResult(r); setParsing(false)
+  }
+
+  function doImport() {
+    if (!result || result.status !== 'success') return
+    addSnapshot(epfToSnapshot(result))
+    epfToTransactions(result).forEach(t => addTransaction(t))
+    setImported(true)
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="bg-orange-500/5 border border-orange-500/20 rounded-xl p-4 text-xs text-surface-700 flex flex-col gap-1.5">
+        <p className="font-semibold text-surface-800">How to get your EPF passbook</p>
+        <p>1. Log in to <strong>passbook.epfindia.gov.in</strong></p>
+        <p>2. Select member ID → View Passbook → Download PDF</p>
+        <p className="text-surface-400 mt-1">Password is usually your UAN number or date of birth (DDMMYYYY)</p>
+      </div>
+      {!result && !parsing && (
+        <div className="border-2 border-dashed border-surface-200 rounded-2xl p-8 flex flex-col items-center gap-3 cursor-pointer hover:border-orange-400 hover:bg-orange-50/20 transition-all" onClick={() => fileRef.current?.click()}>
+          <Upload size={22} className="text-surface-300"/>
+          <p className="text-sm font-semibold text-surface-700">Drop your EPF passbook PDF here</p>
+          <input ref={fileRef} type="file" accept=".pdf" className="hidden"
+            onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = '' }}/>
+          <input className="input-field text-xs w-full max-w-xs" placeholder="PDF password (UAN or DDMMYYYY)"
+            value={password} onChange={e => setPassword(e.target.value)} onClick={e => e.stopPropagation()}/>
+        </div>
+      )}
+      {parsing && <div className="flex items-center justify-center gap-3 py-10"><Loader2 size={18} className="animate-spin text-orange-500"/><span className="text-sm text-surface-600">Reading your EPF passbook…</span></div>}
+      {result?.status === 'password_required' && <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-xs text-amber-700">Password required — enter it above and re-upload</div>}
+      {result?.status === 'parse_error' && <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 text-xs text-rose-700">{result.message} <button onClick={() => setResult(null)} className="underline ml-2">Try again</button></div>}
+      {result?.status === 'success' && !imported && (
+        <div className="flex flex-col gap-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="p-3 bg-surface-50 rounded-xl text-center"><p className="text-xs text-surface-400 mb-0.5">EPF Balance</p><p className="text-sm font-bold">{fmtINR(result.totalBalance)}</p></div>
+            <div className="p-3 bg-surface-50 rounded-xl text-center"><p className="text-xs text-surface-400 mb-0.5">Entries</p><p className="text-sm font-bold">{result.entries.length} months</p></div>
+          </div>
+          <button onClick={doImport} className="btn-primary flex items-center justify-center gap-2"><CheckCircle size={14}/> Save EPF data</button>
+        </div>
+      )}
+      {imported && <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4 text-center text-sm text-emerald-700 font-medium">EPF balance saved to your Net Worth ✓</div>}
+    </div>
+  )
+}
+
+// ─── PPF / NPS manual entry tab ──────────────────────────────────────────────
+const RETIREMENT_TYPES = [
+  { id: 'PPF',    label: 'PPF',              hint: 'Public Provident Fund' },
+  { id: 'NPS',    label: 'NPS',              hint: 'National Pension Scheme' },
+  { id: 'VPF',    label: 'VPF',              hint: 'Voluntary Provident Fund' },
+  { id: 'Gratuity', label: 'Gratuity',       hint: 'Employer gratuity corpus' },
+  { id: 'Pension',  label: 'Pension Corpus', hint: 'Any other pension fund' },
+]
+
+function RetirementTab() {
+  const { addHolding } = useApp()
+  const [type,      setType]      = useState('PPF')
+  const [balance,   setBalance]   = useState('')
+  const [costBasis, setCostBasis] = useState('')
+  const [saved,     setSaved]     = useState(false)
+
+  function save() {
+    if (!balance) return
+    addHolding({
+      name:       type,
+      ticker:     '',
+      type:       'retirement',
+      assetClass: 'Debt',
+      subType:    type,
+      qty:        1,
+      lastPrice:  parseFloat(balance),
+      value:      Math.round(parseFloat(balance)),
+      costBasis:  Math.round(parseFloat(costBasis || balance)),
+    })
+    setSaved(true)
+    setTimeout(() => { setSaved(false); setBalance(''); setCostBasis('') }, 2000)
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <p className="text-xs text-surface-400">PPF and NPS don't have a standard downloadable statement. Enter your current balance manually below — update it every quarter.</p>
+      <div className="flex gap-2 flex-wrap">
+        {RETIREMENT_TYPES.map(t => (
+          <button key={t.id} onClick={() => setType(t.id)}
+            className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors
+              ${type === t.id ? 'border-amber-400 bg-amber-50 text-amber-700' : 'border-surface-200 text-surface-500 hover:border-amber-300'}`}>
+            {t.label} <span className="text-surface-300 font-normal">· {t.hint}</span>
+          </button>
+        ))}
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="text-xs font-semibold text-surface-400 uppercase tracking-widest block mb-1.5">Current Balance (₹)</label>
+          <input className="input-field" type="number" placeholder="e.g. 450000"
+            value={balance} onChange={e => setBalance(e.target.value)}/>
+        </div>
+        <div>
+          <label className="text-xs font-semibold text-surface-400 uppercase tracking-widest block mb-1.5">Total Invested (₹) <span className="normal-case font-normal">optional</span></label>
+          <input className="input-field" type="number" placeholder="e.g. 380000"
+            value={costBasis} onChange={e => setCostBasis(e.target.value)}/>
+        </div>
+      </div>
+      <button onClick={save} disabled={!balance}
+        className="btn-primary disabled:opacity-40 flex items-center justify-center gap-2">
+        {saved ? <><CheckCircle size={14}/> Saved!</> : `Add ${type} balance`}
+      </button>
+    </div>
+  )
+}
+
+// ─── Crypto manual entry tab ──────────────────────────────────────────────────
+const CRYPTO_LIST = [
+  { symbol: 'BTC',  name: 'Bitcoin'        },
+  { symbol: 'ETH',  name: 'Ethereum'       },
+  { symbol: 'SOL',  name: 'Solana'         },
+  { symbol: 'BNB',  name: 'BNB'            },
+  { symbol: 'XRP',  name: 'XRP'            },
+  { symbol: 'ADA',  name: 'Cardano'        },
+  { symbol: 'AVAX', name: 'Avalanche'      },
+  { symbol: 'DOT',  name: 'Polkadot'       },
+  { symbol: 'MATIC',name: 'Polygon'        },
+  { symbol: 'LINK', name: 'Chainlink'      },
+  { symbol: 'DOGE', name: 'Dogecoin'       },
+  { symbol: 'SHIB', name: 'Shiba Inu'      },
+  { symbol: 'USDT', name: 'Tether (USDT)'  },
+  { symbol: 'USDC', name: 'USD Coin (USDC)'},
+]
+
+function CryptoTab() {
+  const { data, addHolding, deleteHolding } = useApp()
+  const [symbol,   setSymbol]   = useState('BTC')
+  const [custom,   setCustom]   = useState('')
+  const [qty,      setQty]      = useState('')
+  const [costInr,  setCostInr]  = useState('')
+  const [saved,    setSaved]    = useState(false)
+
+  const cryptoHoldings = data.holdings.filter(h => h.assetClass === 'Cryptocurrency' || h.type === 'crypto')
+
+  function save() {
+    const sym = custom.toUpperCase() || symbol
+    if (!sym || !qty) return
+    const coin = CRYPTO_LIST.find(c => c.symbol === sym)
+    addHolding({
+      name:       coin ? `${coin.name} (${sym})` : sym,
+      ticker:     sym,
+      type:       'crypto',
+      assetClass: 'Cryptocurrency',
+      subType:    'Cryptocurrency',
+      qty:        parseFloat(qty),
+      value:      Math.round(parseFloat(costInr || '0')),
+      costBasis:  Math.round(parseFloat(costInr || '0')),
+    })
+    setSaved(true)
+    setTimeout(() => { setSaved(false); setQty(''); setCostInr(''); setCustom('') }, 2000)
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <p className="text-xs text-surface-400">Add your crypto holdings manually. Use "Refresh prices" in Asset Allocation to fetch live prices from Yahoo Finance.</p>
+      {cryptoHoldings.length > 0 && (
+        <div className="flex flex-col gap-1 p-3 bg-surface-50 rounded-xl border border-surface-100">
+          <p className="text-xs font-semibold text-surface-600 mb-1">Currently saved</p>
+          {cryptoHoldings.map(h => (
+            <div key={h.id} className="flex items-center justify-between">
+              <span className="text-xs text-surface-700">{h.name} · <span className="font-mono text-surface-400">{h.qty} units</span></span>
+              <button onClick={() => deleteHolding(h.id)} className="text-[10px] text-surface-300 hover:text-rose-400 px-1.5 py-0.5 rounded border border-transparent hover:border-rose-200 transition-colors">Remove</button>
+            </div>
+          ))}
+        </div>
+      )}
+      <div>
+        <label className="text-xs font-semibold text-surface-400 uppercase tracking-widest block mb-2">Select Cryptocurrency</label>
+        <div className="flex flex-wrap gap-1.5 mb-2">
+          {CRYPTO_LIST.map(c => (
+            <button key={c.symbol} onClick={() => { setSymbol(c.symbol); setCustom('') }}
+              className={`px-2.5 py-1 rounded-lg border text-xs font-medium transition-colors
+                ${symbol === c.symbol && !custom ? 'border-amber-400 bg-amber-50 text-amber-700' : 'border-surface-200 text-surface-500 hover:border-amber-300'}`}>
+              {c.symbol}
+            </button>
+          ))}
+        </div>
+        <input className="input-field text-xs" placeholder="Or type any symbol e.g. PEPE, WLD"
+          value={custom} onChange={e => setCustom(e.target.value.toUpperCase())}/>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="text-xs font-semibold text-surface-400 uppercase tracking-widest block mb-1.5">Quantity</label>
+          <input className="input-field" type="number" placeholder="e.g. 0.05"
+            value={qty} onChange={e => setQty(e.target.value)}/>
+        </div>
+        <div>
+          <label className="text-xs font-semibold text-surface-400 uppercase tracking-widest block mb-1.5">Cost Basis (₹) <span className="normal-case font-normal">optional</span></label>
+          <input className="input-field" type="number" placeholder="Amount invested"
+            value={costInr} onChange={e => setCostInr(e.target.value)}/>
+        </div>
+      </div>
+      <button onClick={save} disabled={!qty || (!symbol && !custom)}
+        className="btn-primary disabled:opacity-40 flex items-center justify-center gap-2">
+        {saved ? <><CheckCircle size={14}/> Saved!</> : `Add ${custom || symbol}`}
+      </button>
+    </div>
+  )
+}
+
 // ─── Main accordion ─────────────────────────────────────────────────────────────
 
 export default function DataManagement() {
@@ -403,9 +625,12 @@ export default function DataManagement() {
             ))}
           </div>
           <div className="p-5">
-            {activeTab === 'zerodha'   && <ZerodhaTab />}
-            {activeTab === 'fidelity'  && <FidelityTab />}
-            {activeTab === 'import'    && <section id="section-import"><ImportCard /></section>}
+            {activeTab === 'zerodha'    && <ZerodhaTab />}
+            {activeTab === 'fidelity'   && <FidelityTab />}
+            {activeTab === 'epf'        && <EPFTab />}
+            {activeTab === 'retirement' && <RetirementTab />}
+            {activeTab === 'crypto'     && <CryptoTab />}
+            {activeTab === 'import'     && <section id="section-import"><ImportCard /></section>}
             {activeTab === 'networth'  && <section id="section-networth"><NetWorthCard /></section>}
             {activeTab === 'cashflow'  && <section id="section-cashflow"><CashFlowCard /></section>}
             {activeTab === 'debt'      && <section id="section-debt"><DebtCard /></section>}
