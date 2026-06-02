@@ -181,9 +181,16 @@ export default function GoalsCard() {
             {data.goals.length} goal{data.goals.length !== 1 ? 's' : ''} · shown as markers on the timeline
           </p>
         </div>
-        <button data-expand="goals" className="btn-ghost" onClick={() => setExpanded(v => !v)}>
-          {expanded ? <ChevronUp size={16}/> : <ChevronDown size={16}/>}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => { setExpanded(true); setShowCustom(true) }}
+            className="btn-primary flex items-center gap-1 text-xs px-3 py-1.5">
+            <Plus size={12}/> Add Goal
+          </button>
+          <button data-expand="goals" className="btn-ghost" onClick={() => setExpanded(v => !v)}>
+            {expanded ? <ChevronUp size={16}/> : <ChevronDown size={16}/>}
+          </button>
+        </div>
       </div>
 
       {/* Inline edit form — shown above chips when editing */}
