@@ -9,21 +9,11 @@ import AssetAllocationCard from './components/AssetAllocationCard'
 import FinancialArc from './components/FinancialArc'
 import FireHorizon from './components/FireHorizon'
 import GoalsCard from './components/GoalsCard'
-import ActionCards from './components/ActionCards'
 import CrorepatiCalc from './components/CrorepatiCalc'
 import DataManagement from './components/DataManagement'
 import { ONBOARD_KEY, isDemoMode } from './lib/demoData'
 import { DEFAULT_DATA } from './lib/storage'
 
-function scrollTo(sectionId: string) {
-  const el = document.getElementById(sectionId)
-  if (!el) return
-  el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-  el.style.transition = 'outline 0.1s'
-  el.style.outline    = '2px solid #f59e0b'
-  el.style.borderRadius = '16px'
-  setTimeout(() => { el.style.outline = 'none' }, 1800)
-}
 
 function AppContent() {
   const [wizardOpen, setWizardOpen]   = useState(false)
@@ -82,8 +72,6 @@ function AppContent() {
           <GoalsCard />
         </section>
 
-        {/* ── Recommended Actions (max 2) ─────────────────── */}
-        <ActionCards onNavigate={scrollTo} />
 
         {/* ── Data Management (collapsed accordion) ────────── */}
         <DataManagement />
