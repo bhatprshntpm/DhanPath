@@ -28,28 +28,37 @@ function hasEquity(s: any): boolean {
   return s.assets.brokerage > 0 || s.assets.other > 0
 }
 
-// Forward-fill: for each snapshot, carry forward brokerage+gold from last
-// Zerodha/equity import so EPF-only months don't show a false drop to zero
+// Forward-fill ALL asset types — any field that was non-zero in a previous
+// import is carried forward until a newer import overrides it.
+// This means crypto, RSU, real estate, cash all persist across months
+// even if only EPF was imported that month.
 function applyCarryForward(snapshots: any[]): { s: any; carried: boolean; adjustedNw: number }[] {
-  let lastBrokerage = 0
-  let lastOther     = 0
+  let last = { brokerage: 0, other: 0, checking: 0, savings: 0, realEstate: 0 }
 
   return snapshots.map(s => {
-    const brokerage = s.assets.brokerage > 0 ? s.assets.brokerage : lastBrokerage
-    const other     = s.assets.other     > 0 ? s.assets.other     : lastOther
+    const a = s.assets
+    const filled = {
+      brokerage:  a.brokerage  > 0 ? a.brokerage  : last.brokerage,
+      other:      a.other      > 0 ? a.other       : last.other,
+      checking:   a.checking   > 0 ? a.checking    : last.checking,
+      savings:    a.savings    > 0 ? a.savings     : last.savings,
+      realEstate: a.realEstate > 0 ? a.realEstate  : last.realEstate,
+    }
 
-    if (s.assets.brokerage > 0) lastBrokerage = s.assets.brokerage
-    if (s.assets.other     > 0) lastOther     = s.assets.other
+    // Update last known values
+    if (a.brokerage  > 0) last.brokerage  = a.brokerage
+    if (a.other      > 0) last.other      = a.other
+    if (a.checking   > 0) last.checking   = a.checking
+    if (a.savings    > 0) last.savings    = a.savings
+    if (a.realEstate > 0) last.realEstate = a.realEstate
 
-    const carried = s.assets.brokerage === 0 && lastBrokerage > 0
+    const carried = (a.brokerage === 0 && last.brokerage > 0)
+                 || (a.other     === 0 && last.other     > 0)
+                 || (a.checking  === 0 && last.checking  > 0)
 
     const adjustedNw =
-      brokerage
-      + other
-      + s.assets.retirement
-      + s.assets.checking
-      + s.assets.savings
-      + s.assets.realEstate
+      filled.brokerage + filled.other + filled.checking +
+      filled.savings   + filled.realEstate + a.retirement
       - totalLiabilities(s)
 
     return { s, carried, adjustedNw }

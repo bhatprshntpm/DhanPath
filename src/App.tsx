@@ -6,8 +6,7 @@ import DemoBanner from './components/DemoBanner'
 import HeroSection from './components/HeroSection'
 import CashFlowOverview from './components/CashFlowOverview'
 import AssetAllocationCard from './components/AssetAllocationCard'
-import LifetimeTimeline from './components/LifetimeTimeline'
-import PortfolioHistory from './components/PortfolioHistory'
+import FinancialArc from './components/FinancialArc'
 import FireHorizon from './components/FireHorizon'
 import GoalsCard from './components/GoalsCard'
 import ActionCards from './components/ActionCards'
@@ -68,14 +67,9 @@ function AppContent() {
           <CashFlowOverview />
         </div>
 
-        {/* ── ACT 2b: Portfolio History ───────────────── */}
-        <section id="section-history">
-          <PortfolioHistory />
-        </section>
-
-        {/* ── ACT 3: Your Future ──────────────────────────── */}
-        <section id="section-timeline">
-          <LifetimeTimeline />
+        {/* ── ACT 2b + 3: Financial Arc (past + future unified) ── */}
+        <section id="section-arc">
+          <FinancialArc />
         </section>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
