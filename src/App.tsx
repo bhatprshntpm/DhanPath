@@ -14,6 +14,7 @@ import ActionCards from './components/ActionCards'
 import CrorepatiCalc from './components/CrorepatiCalc'
 import DataManagement from './components/DataManagement'
 import { ONBOARD_KEY, isDemoMode } from './lib/demoData'
+import { DEFAULT_DATA } from './lib/storage'
 
 function scrollTo(sectionId: string) {
   const el = document.getElementById(sectionId)
@@ -28,11 +29,12 @@ function scrollTo(sectionId: string) {
 function AppContent() {
   const [wizardOpen, setWizardOpen]   = useState(false)
   const [demoMode,   setDemoMode_]    = useState(() => isDemoMode())
-  const { loading } = useApp()
+  const { loading, replaceData } = useApp()
 
   function handleUseMyData() {
     localStorage.setItem(ONBOARD_KEY, '1')
     setDemoMode_(false)
+    replaceData(DEFAULT_DATA)   // wipe demo data from memory so wizard saves a clean slate
     setWizardOpen(true)
   }
 
