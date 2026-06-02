@@ -106,10 +106,13 @@ export default function FireHorizon() {
   const retireAge = yrs >= 0 ? settings.currentAge + yrs : null
 
   const primarySliders = [
-    { label: 'Current Age',       key: 'currentAge',      value: settings.currentAge,      min: 18,   max: 80,     step: 1,    suffix: ' yrs' },
-    { label: 'Target Retirement', key: 'retirementAge',   value: settings.retirementAge,   min: 30,   max: 80,     step: 1,    suffix: ' yrs' },
-    { label: 'Monthly Expenses',  key: 'monthlyExpenses', value: settings.monthlyExpenses, min: 5000, max: 500000, step: 1000, prefix: '₹'    },
-    { label: 'Planning Horizon',  key: 'lifeExpectancy',  value: settings.lifeExpectancy,  min: 70,   max: 120,    step: 1,    suffix: ' yrs' },
+    { label: 'Current Age',       key: 'currentAge',      value: settings.currentAge,      min: 18,   max: 80,      step: 1,    suffix: ' yrs' },
+    { label: 'Target Retirement', key: 'retirementAge',   value: settings.retirementAge,   min: 30,   max: 80,      step: 1,    suffix: ' yrs' },
+    { label: 'Monthly Income',    key: 'monthlyIncome',   value: settings.monthlyIncome,   min: 0,    max: 1000000, step: 1000, prefix: '₹',   hint: 'Monthly take-home after tax' },
+    { label: 'Monthly Expenses',  key: 'monthlyExpenses', value: settings.monthlyExpenses, min: 5000, max: 500000,  step: 1000, prefix: '₹'    },
+    { label: 'Existing SIP',      key: 'existingSIP',     value: settings.existingSIP,     min: 0,    max: 500000,  step: 500,  prefix: '₹',   hint: 'Total auto-invested monthly (all MFs, ETFs combined)' },
+    { label: 'Monthly EMIs',      key: 'monthlyEMI',      value: settings.monthlyEMI,      min: 0,    max: 500000,  step: 500,  prefix: '₹',   hint: 'Total of all loan EMIs (home, car, personal)' },
+    { label: 'Planning Horizon',  key: 'lifeExpectancy',  value: settings.lifeExpectancy,  min: 70,   max: 120,     step: 1,    suffix: ' yrs' },
   ]
 
   const advancedSliders = [

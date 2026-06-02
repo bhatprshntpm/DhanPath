@@ -98,6 +98,9 @@ export interface Settings {
   inflationRate: number
   safeWithdrawalRate: number
   monthlyExpenses: number
+  monthlyIncome:   number
+  existingSIP:     number
+  monthlyEMI:      number
   lifestyleMultiplier: number
   currency: string
 }

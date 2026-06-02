@@ -28,6 +28,9 @@ const DEFAULT_SETTINGS: Settings = {
   inflationRate:       6,
   safeWithdrawalRate:  4,
   monthlyExpenses:     60000,
+  monthlyIncome:       0,
+  existingSIP:         0,
+  monthlyEMI:          0,
   lifestyleMultiplier: 1.0,
   currency:            'INR',
 }

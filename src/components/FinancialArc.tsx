@@ -190,7 +190,7 @@ export default function FinancialArc() {
 
   // Current state levers — seeded from saved settings/scenario
   const [cur, setCur] = useState({
-    monthlySavings: baseAssump?.extraMonthlySavings ?? 10000,
+    monthlySavings: settings.existingSIP > 0 ? settings.existingSIP : (baseAssump?.extraMonthlySavings ?? 0),
     returnRate:     baseAssump?.annualReturn        ?? 12,
     expenses:       settings.monthlyExpenses        ?? 60000,
   })
@@ -375,7 +375,7 @@ export default function FinancialArc() {
             <p className="text-[11px] font-semibold text-amber-700 uppercase tracking-widest">Current</p>
             {fireAgeCur && <span className="text-[11px] font-semibold text-amber-600">FIRE age {fireAgeCur}</span>}
           </div>
-          <LeverSlider label="Monthly Savings" value={cur.monthlySavings} min={0} max={200000} step={1000}
+          <LeverSlider label="Monthly Investment (SIP)" value={cur.monthlySavings} min={0} max={200000} step={1000}
             prefix="₹" color="amber" onChange={v => updateCur({ monthlySavings: v })} />
           <LeverSlider label="Return Rate" value={cur.returnRate} min={5} max={20} step={0.5}
             suffix="%" color="amber" onChange={v => updateCur({ returnRate: v })} />
@@ -396,7 +396,7 @@ export default function FinancialArc() {
               )}
             </div>
           </div>
-          <LeverSlider label="Monthly Savings" value={wi.monthlySavings} min={0} max={200000} step={1000}
+          <LeverSlider label="Monthly Investment (SIP)" value={wi.monthlySavings} min={0} max={200000} step={1000}
             prefix="₹" color="green" onChange={v => { setWi(p => ({ ...p, monthlySavings: v })); setWiActive(true) }} />
           <LeverSlider label="Return Rate" value={wi.returnRate} min={5} max={20} step={0.5}
             suffix="%" color="green" onChange={v => { setWi(p => ({ ...p, returnRate: v })); setWiActive(true) }} />

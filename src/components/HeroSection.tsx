@@ -47,7 +47,15 @@ export default function HeroSection() {
   const hasData  = snapshots.length > 0 || transactions.length > 0
   const thisMonth = new Date().toISOString().slice(0, 7)
   const cf       = monthlyCashFlow(transactions, thisMonth)
-  const savingsRate = cf.income > 0 ? Math.round((cf.net / cf.income) * 100) : 0
+
+  // Prefer settings-based income/savings over transaction-derived (more reliable)
+  const income       = settings.monthlyIncome   > 0 ? settings.monthlyIncome   : cf.income
+  const expenses     = settings.monthlyExpenses > 0 ? settings.monthlyExpenses : cf.income - cf.net
+  const emi          = settings.monthlyEMI      > 0 ? settings.monthlyEMI      : 0
+  const sip          = settings.existingSIP     > 0 ? settings.existingSIP     : 0
+  const surplus      = income - expenses - emi
+  const savingsRate  = income > 0 ? Math.round(((surplus) / income) * 100) : 0
+  const investRate   = income > 0 ? Math.round((sip / income) * 100) : 0
 
   const fireTarget  = fireNumber(settings.monthlyExpenses, settings.safeWithdrawalRate)
   const firePct     = fireTarget > 0 ? Math.min(Math.round((nwNow / fireTarget) * 100), 100) : 0
@@ -98,10 +106,24 @@ export default function HeroSection() {
               <span className="text-[10px] text-surface-300">/ 100</span>
             </div>
           )}
-          {savingsRate > 0 && (
+          {income > 0 && savingsRate > 0 && (
             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface-50 border border-surface-100">
-              <span className="text-[10px] font-semibold text-surface-400 uppercase tracking-wider">Saved</span>
+              <span className="text-[10px] font-semibold text-surface-400 uppercase tracking-wider">Saves</span>
               <span className="text-sm font-bold text-emerald-600">{savingsRate}%</span>
+              <span className="text-[10px] text-surface-300">{fmtINR(surplus)}/mo</span>
+            </div>
+          )}
+          {income > 0 && sip > 0 && (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface-50 border border-surface-100">
+              <span className="text-[10px] font-semibold text-surface-400 uppercase tracking-wider">Invests</span>
+              <span className="text-sm font-bold text-amber-600">{investRate}%</span>
+              <span className="text-[10px] text-surface-300">{fmtINR(sip)}/mo</span>
+            </div>
+          )}
+          {income > 0 && emi > 0 && (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface-50 border border-surface-100">
+              <span className="text-[10px] font-semibold text-surface-400 uppercase tracking-wider">EMI</span>
+              <span className="text-sm font-bold text-rose-500">{fmtINR(emi)}/mo</span>
             </div>
           )}
         </div>
