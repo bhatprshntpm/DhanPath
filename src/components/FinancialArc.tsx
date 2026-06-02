@@ -18,11 +18,13 @@ function shortMonth(yyyyMM: string) {
   return `${MONTH_NAMES[parseInt(m) - 1]} '${y.slice(2)}`
 }
 function fmtAxis(v: number) {
-  if (v >= 1e7) return `₹${(v / 1e7).toFixed(1)}Cr`
+  if (v >= 1e7) return `₹${(v / 1e7).toFixed(0)}Cr`
   if (v >= 1e5) return `₹${(v / 1e5).toFixed(0)}L`
   if (v >= 1e3) return `₹${(v / 1e3).toFixed(0)}k`
   return `₹${v}`
 }
+
+type ViewMode = '5yr' | '10yr' | 'lifetime'
 
 function deduplicate(snapshots: any[]) {
   const map = new Map<string, any>()
@@ -49,9 +51,7 @@ function applyCarryForward(snapshots: any[]) {
     if (a.checking   > 0) last.checking   = a.checking
     if (a.savings    > 0) last.savings    = a.savings
     if (a.realEstate > 0) last.realEstate = a.realEstate
-
-    const carried = (a.brokerage === 0 && last.brokerage > 0)
-                 || (a.other     === 0 && last.other     > 0)
+    const carried = (a.brokerage === 0 && last.brokerage > 0) || (a.other === 0 && last.other > 0)
     const adjustedNw =
       filled.brokerage + filled.other + filled.checking +
       filled.savings + filled.realEstate + a.retirement - totalLiabilities(s)
@@ -79,7 +79,7 @@ function ArcTooltip({ active, payload, label }: any) {
       ) : null)}
       {goalNames?.length ? (
         <div className="mt-2 pt-2 border-t border-surface-100">
-          {goalNames.map(g => (
+          {goalNames.map((g: string) => (
             <p key={g} className={`text-xs font-medium ${g.includes('⚠') ? 'text-rose-500' : 'text-emerald-600'}`}>
               {g.includes('⚠') ? '⚠ shortfall — ' : '✓ funded — '}{g.replace(' ⚠', '')}
             </p>
@@ -97,10 +97,8 @@ function SnapshotTable({ rows }: { rows: ReturnType<typeof applyCarryForward> })
   return (
     <div className="flex flex-col divide-y divide-surface-50 mt-2">
       <div className="grid grid-cols-4 gap-2 pb-2 text-[9px] uppercase tracking-widest font-semibold text-surface-300">
-        <span>Period</span>
-        <span className="text-right">Net Worth</span>
-        <span className="text-right">Change</span>
-        <span className="text-right">vs Start</span>
+        <span>Period</span><span className="text-right">Net Worth</span>
+        <span className="text-right">Change</span><span className="text-right">vs Start</span>
       </div>
       {rows.map(({ s, carried, adjustedNw }, i) => {
         const prev    = i > 0 ? rows[i - 1].adjustedNw : 0
@@ -127,7 +125,7 @@ function SnapshotTable({ rows }: { rows: ReturnType<typeof applyCarryForward> })
             </button>
             {isOpen && (
               <div className="ml-4 mb-2 pt-2 border-t border-surface-50 animate-fade-up">
-                {carried && <p className="text-[10px] text-amber-600 mb-1.5">Equity carried from last import — re-import for exact value</p>}
+                {carried && <p className="text-[10px] text-amber-600 mb-1.5">Some assets carried from last import — re-import for exact values</p>}
                 <div className="grid grid-cols-2 gap-x-4 gap-y-1">
                   {Object.entries(s.breakdown ?? {})
                     .filter(([, v]) => (v as number) > 0)
@@ -150,14 +148,15 @@ function SnapshotTable({ rows }: { rows: ReturnType<typeof applyCarryForward> })
 
 // ─── main ────────────────────────────────────────────────────────────────────
 export default function FinancialArc() {
-  const { data }    = useApp()
+  const { data } = useApp()
   const { snapshots, scenarios, settings, goals } = data
+  const [view,      setView]      = useState<ViewMode>('10yr')
   const [showTable, setShowTable] = useState(false)
 
   const currentYear  = new Date().getFullYear()
   const annualReturn = scenarios[0]?.assumptions?.annualReturn ?? 12
 
-  // Live net worth
+  // Live net worth from holdings (matches hero section)
   const nwNow = useMemo(() => {
     const sorted = [...snapshots].sort((a, b) => a.date.localeCompare(b.date))
     const latest = sorted.at(-1)
@@ -170,35 +169,37 @@ export default function FinancialArc() {
     return latest ? totalAssets(latest) - totalLiabilities(latest) : 0
   }, [data])
 
-  // Historical rows with carry-forward
-  const rows = useMemo(() => applyCarryForward(deduplicate(snapshots)), [snapshots])
-
-  // Projection data
+  const rows       = useMemo(() => applyCarryForward(deduplicate(snapshots)), [snapshots])
   const baseline   = scenarios.find(s => s.enabled && s.id === 'baseline') ?? scenarios.find(s => s.enabled)
   const projFull   = baseline ? projectLifetime(nwNow, settings, baseline, goals) : []
   const projSimple = baseline ? projectLifetimeNoGoals(nwNow, settings, baseline) : []
 
-  // Build unified chart data: one point per year from first import to life expectancy
   const startYear  = rows.length ? parseInt(rows[0].s.date.slice(0, 4)) : currentYear
   const endYear    = currentYear + (settings.lifeExpectancy - settings.currentAge)
   const retireYear = currentYear + (settings.retirementAge - settings.currentAge)
 
-  const chartData = useMemo(() => {
-    const yearMap = new Map<number, any>()
+  // View window
+  const windowEnd = view === '5yr' ? currentYear + 5 : view === '10yr' ? currentYear + 10 : endYear
+  const windowStart = Math.min(startYear, currentYear - 1)
 
-    // Seed years
+  // Build chart data — use nwNow for current year to match hero
+  const allChartData = useMemo(() => {
+    const yearMap = new Map<number, any>()
     for (let y = startYear; y <= endYear; y++) {
       yearMap.set(y, { year: y, age: settings.currentAge + (y - currentYear) })
     }
 
-    // Historical actual: aggregate by year (use highest-month value per year)
+    // Historical: use carry-forward adjusted values from snapshots
     rows.forEach(({ adjustedNw, s }) => {
       const yr = parseInt(s.date.slice(0, 4))
       const pt = yearMap.get(yr)
       if (pt && (pt.actual == null || adjustedNw > pt.actual)) pt.actual = adjustedNw
     })
 
-    // Projections from currentYear onwards
+    // Override current year with live nwNow so it matches the hero section
+    const curPt = yearMap.get(currentYear)
+    if (curPt && nwNow > 0) curPt.actual = nwNow
+
     projSimple.forEach(p => {
       const pt = yearMap.get(p.year)
       if (pt && p.year >= currentYear) pt.potential = p.value
@@ -206,35 +207,34 @@ export default function FinancialArc() {
     projFull.forEach(p => {
       const pt = yearMap.get(p.year)
       if (pt && p.year >= currentYear) {
-        pt.projected  = p.value
-        pt.netFlow    = p.netFlow
-        pt.goalNames  = p.goalNames
+        pt.projected = p.value
+        pt.netFlow   = p.netFlow
+        pt.goalNames = p.goalNames
       }
     })
 
     return Array.from(yearMap.values()).sort((a, b) => a.year - b.year)
-  }, [rows, projSimple, projFull, startYear, endYear, currentYear, settings])
+  }, [rows, projSimple, projFull, startYear, endYear, currentYear, settings, nwNow])
 
-  // Goal markers
+  const chartData = allChartData.filter(d => d.year >= windowStart && d.year <= windowEnd)
+
   const goalDots = goals.filter(g => g.enabled).map(g => ({
-    year: currentYear + (g.targetAge - settings.currentAge),
-    g,
-  })).filter(d => d.year > currentYear && d.year <= endYear)
+    year: currentYear + (g.targetAge - settings.currentAge), g,
+  })).filter(d => d.year > currentYear && d.year <= windowEnd)
 
-  // What to show
   const hasHistory    = rows.length >= 2
   const hasProjection = projSimple.length > 0 && nwNow > 0
   const isEmpty       = !hasHistory && !hasProjection
 
   if (isEmpty) return (
-    <div className="card p-6 flex flex-col items-center justify-center h-48 gap-3 text-surface-300">
+    <div className="card p-6 flex flex-col items-center justify-center h-48 gap-3">
       <span className="text-4xl">📈</span>
       <p className="text-sm font-medium text-surface-700">Your financial arc will appear here</p>
-      <p className="text-xs text-center max-w-xs">Import Zerodha or EPF data to see your journey, or set income in Scenarios to see projections.</p>
+      <p className="text-xs text-surface-400 text-center max-w-xs">Import Zerodha or EPF data, or set income in Scenarios to see projections.</p>
     </div>
   )
 
-  // Projection-only mode (no history yet): show growth milestones + curve
+  // Projection-only (no history yet)
   if (!hasHistory && hasProjection) {
     const milestones = [
       { label: '1 Year',   value: project(nwNow, 12,  annualReturn) },
@@ -257,72 +257,84 @@ export default function FinancialArc() {
             </div>
           ))}
         </div>
-        <ResponsiveContainer width="100%" height={180}>
+        <ResponsiveContainer width="100%" height={160}>
           <ComposedChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#f5f5f4" vertical={false} />
-            <XAxis dataKey="year" tick={{ fontSize: 10, fill: '#a8a29e' }} tickLine={false} axisLine={false} interval={Math.max(1, Math.floor(chartData.length / 8))} />
+            <XAxis dataKey="year" tick={{ fontSize: 10, fill: '#a8a29e' }} tickLine={false} axisLine={false} />
             <YAxis tickFormatter={fmtAxis} tick={{ fontSize: 9, fill: '#a8a29e' }} tickLine={false} axisLine={false} width={58} />
             <Tooltip content={<ArcTooltip />} />
-            <ReferenceLine x={retireYear} stroke="#f59e0b" strokeDasharray="4 4" label={{ value: '🔥', position: 'insideTopLeft', fontSize: 14 }} />
+            <ReferenceLine x={retireYear <= windowEnd ? retireYear : undefined} stroke="#f59e0b" strokeDasharray="4 4" label={{ value: '🔥', position: 'insideTopLeft', fontSize: 14 }} />
             <Line dataKey="projected" name="Goal-adjusted" stroke="#f59e0b" strokeWidth={2} strokeDasharray="6 3" dot={false} connectNulls />
-            <Line dataKey="potential" name="Potential" stroke="#f59e0b" strokeWidth={1.5} strokeOpacity={0.35} dot={false} connectNulls />
+            <Line dataKey="potential" name="Potential"     stroke="#f59e0b" strokeWidth={1.5} strokeOpacity={0.35} dot={false} connectNulls />
           </ComposedChart>
         </ResponsiveContainer>
       </div>
     )
   }
 
+  // Determine y-axis domain for near-term views so chart isn't squished
+  const visibleValues = chartData.flatMap(d =>
+    [d.actual, d.projected, d.potential].filter((v): v is number => v != null && v > 0)
+  )
+  const yMin = visibleValues.length ? Math.floor(Math.min(...visibleValues) * 0.85) : 0
+  const yMax = visibleValues.length ? Math.ceil(Math.max(...visibleValues) * 1.1)  : undefined
+  const yDomain: [number | string, number | string] = view === 'lifetime' ? [0, 'auto'] : [yMin, yMax ?? 'auto']
+
   return (
     <div className="card p-5 flex flex-col gap-4">
-      {/* Header */}
-      <div className="flex items-start justify-between flex-wrap gap-2">
+      {/* Header + view toggle */}
+      <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
           <p className="section-title">Financial Arc</p>
           <p className="text-xs text-surface-300 mt-0.5">
-            Age {settings.currentAge} → {settings.lifeExpectancy} · actual (solid) + projected (dashed)
+            {fmtINR(nwNow)} today · actual (solid) + projected (dashed)
           </p>
         </div>
-        <div className="flex items-center gap-3 text-xs text-surface-400 flex-wrap">
-          <span className="flex items-center gap-1.5"><span className="w-3 h-0.5 bg-amber-400 rounded inline-block"/><span className="w-3 h-0.5 bg-amber-400 rounded inline-block"/>Actual</span>
-          <span className="flex items-center gap-1.5"><span className="w-3 h-0.5 bg-amber-400 rounded inline-block opacity-40"/><span className="w-3 h-0.5 bg-amber-400 rounded inline-block opacity-40"/>Projected</span>
-          <span>🔥 FIRE target</span>
+        <div className="flex items-center bg-surface-100 rounded-lg p-0.5 gap-0.5">
+          {(['5yr', '10yr', 'lifetime'] as ViewMode[]).map(v => (
+            <button key={v} onClick={() => setView(v)}
+              className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors
+                ${view === v ? 'bg-white text-surface-800 shadow-sm' : 'text-surface-400 hover:text-surface-600'}`}>
+              {v === 'lifetime' ? 'Lifetime' : v}
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* Main arc chart */}
+      {/* Main chart */}
       <ResponsiveContainer width="100%" height={240}>
         <ComposedChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#f5f5f4" vertical={false} />
-          <XAxis dataKey="year" tick={{ fontSize: 11, fill: '#a8a29e' }} tickLine={false} axisLine={false} interval={Math.max(1, Math.floor(chartData.length / 8))} />
-          <YAxis tickFormatter={fmtAxis} tick={{ fontSize: 10, fill: '#a8a29e' }} tickLine={false} axisLine={false} width={60} />
+          <XAxis dataKey="year" tick={{ fontSize: 11, fill: '#a8a29e' }} tickLine={false} axisLine={false}
+            interval={Math.max(0, Math.floor(chartData.length / 7))} />
+          <YAxis tickFormatter={fmtAxis} tick={{ fontSize: 10, fill: '#a8a29e' }} tickLine={false} axisLine={false}
+            width={62} domain={yDomain} />
           <Tooltip content={<ArcTooltip />} />
 
           <ReferenceLine x={currentYear} stroke="#d6d3d1" strokeDasharray="4 4"
             label={{ value: 'Today', position: 'insideTopLeft', fontSize: 10, fill: '#a8a29e' }} />
-          <ReferenceLine x={retireYear} stroke="#f59e0b" strokeDasharray="4 4"
-            label={{ value: '🔥', position: 'insideTopLeft', fontSize: 14 }} />
-
+          {retireYear <= windowEnd && (
+            <ReferenceLine x={retireYear} stroke="#f59e0b" strokeDasharray="4 4"
+              label={{ value: '🔥', position: 'insideTopLeft', fontSize: 14 }} />
+          )}
           {goalDots.map(({ year: yr, g }) => (
             <ReferenceLine key={g.id} x={yr} stroke="transparent"
               label={{ value: g.emoji, position: 'insideTop', fontSize: 16, offset: -4 }} />
           ))}
 
-          {/* Actual history — amber filled area */}
-          <Area dataKey="actual" name="Actual" fill="#fef3c7" stroke="#f59e0b" strokeWidth={2.5} dot={false} connectNulls />
-
-          {/* Forward projection */}
-          <Line dataKey="potential"  name="Potential"      stroke="#f59e0b" strokeWidth={1.5} strokeOpacity={0.35} strokeDasharray="none" dot={false} connectNulls />
-          <Line dataKey="projected"  name="Goal-adjusted"  stroke="#f59e0b" strokeWidth={2}   strokeDasharray="6 3"                        dot={false} connectNulls />
+          <Area dataKey="actual"    name="Actual"        fill="#fef3c7" stroke="#f59e0b" strokeWidth={2.5} dot={false} connectNulls />
+          <Line dataKey="potential" name="Potential"     stroke="#f59e0b" strokeWidth={1.5} strokeOpacity={0.4} strokeDasharray="none" dot={false} connectNulls />
+          <Line dataKey="projected" name="Goal-adjusted" stroke="#f59e0b" strokeWidth={2}   strokeDasharray="6 3" dot={false} connectNulls />
         </ComposedChart>
       </ResponsiveContainer>
 
-      {/* Cash flow sub-chart */}
-      {chartData.some(d => d.netFlow) && (
+      {/* Cash flow sub-chart — only on lifetime view */}
+      {view === 'lifetime' && chartData.some(d => d.netFlow) && (
         <>
           <p className="text-[10px] uppercase tracking-widest font-semibold text-surface-300">Monthly Cash Flow (Projected)</p>
           <ResponsiveContainer width="100%" height={70}>
             <ComposedChart data={chartData} margin={{ top: 0, right: 8, left: 0, bottom: 0 }}>
-              <XAxis dataKey="year" tick={{ fontSize: 9, fill: '#a8a29e' }} tickLine={false} axisLine={false} interval={Math.max(1, Math.floor(chartData.length / 8))} />
+              <XAxis dataKey="year" tick={{ fontSize: 9, fill: '#a8a29e' }} tickLine={false} axisLine={false} interval={Math.max(0, Math.floor(chartData.length / 7))} />
               <YAxis tickFormatter={fmtAxis} tick={{ fontSize: 9, fill: '#a8a29e' }} tickLine={false} axisLine={false} width={58} />
               <Tooltip formatter={(v: any) => [fmtINR(v), 'Monthly net']} labelFormatter={(l: any) => `Year ${l}`} />
               <ReferenceLine y={0} stroke="#e7e5e4" />
@@ -351,11 +363,10 @@ export default function FinancialArc() {
         </div>
       )}
 
-      {/* Collapsible snapshot delta table */}
+      {/* Collapsible snapshot table */}
       {rows.length >= 2 && (
         <div className="border-t border-surface-100 pt-3">
-          <button
-            onClick={() => setShowTable(v => !v)}
+          <button onClick={() => setShowTable(v => !v)}
             className="flex items-center gap-1.5 text-xs font-medium text-surface-400 hover:text-surface-700 transition-colors">
             {showTable ? <ChevronDown size={12}/> : <ChevronRight size={12}/>}
             Month-by-month breakdown ({rows.length} imports)
