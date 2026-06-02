@@ -7,7 +7,7 @@ import {
 import { ChevronDown, ChevronRight, RotateCcw } from 'lucide-react'
 import { useApp } from '../context/AppContext'
 import {
-  projectLifetimeNoGoals, fireNumber,
+  projectLifetime, projectLifetimeNoGoals, fireNumber,
   fmtINR, totalAssets, totalLiabilities,
 } from '../lib/calc'
 
@@ -242,8 +242,10 @@ export default function FinancialArc() {
   const curScenario = makeScenario(cur)
   const wiScenario  = makeScenario(wi)
 
-  const projCur = curScenario ? projectLifetimeNoGoals(nwNow, settings, curScenario) : []
-  const projWi  = wiScenario  ? projectLifetimeNoGoals(nwNow, { ...settings, monthlyExpenses: wi.expenses }, wiScenario) : []
+  // current = with goals (shows dips), potential = without goals (shows ceiling)
+  const projCur      = curScenario ? projectLifetime(nwNow, settings, curScenario, goals) : []
+  const projCurNoGoals = curScenario ? projectLifetimeNoGoals(nwNow, settings, curScenario) : []
+  const projWi       = wiScenario  ? projectLifetime(nwNow, { ...settings, monthlyExpenses: wi.expenses }, wiScenario, goals) : []
 
   // FIRE year for each
   const fireCur = cur.expenses > 0 ? fireNumber(cur.expenses, settings.safeWithdrawalRate) : 0
@@ -281,12 +283,16 @@ export default function FinancialArc() {
       const pt = yearMap.get(p.year)
       if (pt && p.year >= currentYear) pt.current = p.value
     })
+    projCurNoGoals.forEach(p => {
+      const pt = yearMap.get(p.year)
+      if (pt && p.year >= currentYear) pt.potential = p.value
+    })
     projWi.forEach(p => {
       const pt = yearMap.get(p.year)
       if (pt && p.year >= currentYear) pt.whatif = p.value
     })
     return Array.from(yearMap.values()).sort((a, b) => a.year - b.year)
-  }, [rows, projCur, projWi, startYear, endYear, currentYear, currentMonth, settings, nwNow])
+  }, [rows, projCur, projCurNoGoals, projWi, startYear, endYear, currentYear, currentMonth, settings, nwNow])
 
   const chartData = allChartData.filter(d => d.year >= windowStart && d.year <= windowEnd)
 
@@ -307,7 +313,7 @@ export default function FinancialArc() {
   )
 
   const visibleValues = chartData.flatMap(d =>
-    [d.actual, d.current, d.whatif].filter((v): v is number => v != null && v > 0)
+    [d.actual, d.current, d.potential, d.whatif].filter((v): v is number => v != null && v > 0)
   )
   const yMin = visibleValues.length ? Math.floor(Math.min(...visibleValues) * 0.85) : 0
   const yMax = visibleValues.length ? Math.ceil(Math.max(...visibleValues) * 1.1)  : undefined
@@ -361,8 +367,9 @@ export default function FinancialArc() {
             <ReferenceLine key={g.id} x={yr} stroke="transparent"
               label={{ value: g.emoji, position: 'insideTop', fontSize: 16, offset: -4 }} />
           ))}
-          <Area dataKey="actual"  name="Actual"      fill="#fef3c7" stroke="#f59e0b" strokeWidth={2.5} dot={false} connectNulls />
-          <Line dataKey="current" name="Current"     stroke="#f59e0b" strokeWidth={2} strokeDasharray="6 3" dot={false} connectNulls />
+          <Area dataKey="actual"    name="Actual"         fill="#fef3c7" stroke="#f59e0b" strokeWidth={2.5} dot={false} connectNulls />
+          <Line dataKey="potential" name="Without goals"  stroke="#f59e0b" strokeWidth={1} strokeOpacity={0.3} dot={false} connectNulls />
+          <Line dataKey="current"   name="With goals"     stroke="#f59e0b" strokeWidth={2} strokeDasharray="6 3" dot={false} connectNulls />
           {wiDiffers && <Line dataKey="whatif" name="What-if" stroke="#10b981" strokeWidth={2} strokeDasharray="6 3" dot={false} connectNulls />}
         </ComposedChart>
       </ResponsiveContainer>
