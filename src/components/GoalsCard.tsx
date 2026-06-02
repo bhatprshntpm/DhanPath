@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { Plus, Trash2, ChevronDown, ChevronUp, Pencil, Check, X } from 'lucide-react'
 import { useApp } from '../context/AppContext'
-import { fmtINR } from '../lib/calc'
+import { fmtINR, projectLifetimeNoGoals } from '../lib/calc'
 import EmptyState from './EmptyState'
 import type { Goal } from '../types'
 
@@ -125,7 +125,38 @@ export default function GoalsCard() {
   const [draftPreset, setDraftPreset] = useState<GoalDraft | null>(null)
   const [showCustom, setShowCustom]   = useState(false)
 
-  const { settings } = data
+  const { settings, scenarios } = data
+
+  // Compute portfolio trajectory without goals to assess funding
+  const nwNow = useMemo(() => {
+    if (data.holdings.length > 0) return data.holdings.reduce((a, h) => a + h.value, 0)
+    const sorted = [...data.snapshots].sort((a, b) => a.date.localeCompare(b.date))
+    const latest = sorted.at(-1)
+    return latest ? latest.assets.brokerage + latest.assets.retirement + latest.assets.other : 0
+  }, [data])
+
+  const baseline = scenarios.find(s => s.enabled && s.id === 'baseline') ?? scenarios.find(s => s.enabled)
+  const projNoGoals = useMemo(() =>
+    baseline ? projectLifetimeNoGoals(nwNow, settings, baseline) : [],
+  [baseline, nwNow, settings])
+
+  function goalFunding(g: Goal) {
+    const yrsAway    = Math.max(g.targetAge - settings.currentAge, 0)
+    const inf        = settings.inflationRate / 100
+    const cost       = g.inflate ? g.amountToday * Math.pow(1 + inf, yrsAway) : g.amountToday
+    const currentYear = new Date().getFullYear()
+    const goalYear   = currentYear + yrsAway
+    const portfolioAtGoal = projNoGoals.find(p => p.year === goalYear)?.value ?? 0
+    const funded     = portfolioAtGoal > 0 ? Math.min((portfolioAtGoal / cost) * 100, 100) : 0
+    const gap        = Math.max(cost - portfolioAtGoal, 0)
+    // Monthly SIP needed: PMT = FV * r / ((1+r)^n - 1)
+    const r          = (settings.annualReturn / 100) / 12
+    const n          = yrsAway * 12
+    const sipNeeded  = gap > 0 && n > 0 && r > 0
+      ? Math.round(gap * r / (Math.pow(1 + r, n) - 1))
+      : 0
+    return { cost, funded, gap, sipNeeded, portfolioAtGoal }
+  }
 
   function saveGoal(draft: GoalDraft) {
     const { inflationRate: _ir, ...rest } = draft
@@ -185,28 +216,39 @@ export default function GoalsCard() {
           <p className="text-xs text-surface-300 italic">No goals yet — add some below</p>
         )}
         {data.goals.map(g => {
-          const yearsAway = g.targetAge - settings.currentAge
-          const inflated  = g.inflate && yearsAway > 0
-            ? g.amountToday * Math.pow(1 + settings.inflationRate / 100, Math.max(yearsAway, 0))
-            : g.amountToday
+          const { cost, funded, sipNeeded } = goalFunding(g)
+          const isFunded = funded >= 95
+          const yrsAway  = Math.max(g.targetAge - settings.currentAge, 0)
           return (
             <div key={g.id}
-              className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-medium transition-opacity cursor-pointer ${PRIORITY_STYLES[g.priority]} ${!g.enabled ? 'opacity-40' : ''}`}
-              onClick={() => updateGoal({ ...g, enabled: !g.enabled })}
-              title="Click to toggle on/off">
-              <span>{g.emoji}</span>
-              <div>
-                <div>{g.name}</div>
-                <div className="font-normal opacity-70">Age {g.targetAge} · {fmtINR(Math.round(inflated))}</div>
+              className={`flex flex-col gap-2 px-3 py-2.5 rounded-xl border text-xs font-medium transition-opacity ${PRIORITY_STYLES[g.priority]} ${!g.enabled ? 'opacity-40' : ''}`}>
+              <div className="flex items-center gap-2">
+                <span>{g.emoji}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-semibold">{g.name}</span>
+                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${isFunded ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-600'}`}>
+                      {isFunded ? '✓ Funded' : `${Math.round(funded)}%`}
+                    </span>
+                  </div>
+                  <div className="font-normal opacity-70">Age {g.targetAge} · {fmtINR(Math.round(cost))}{yrsAway > 0 ? ` · ${yrsAway}yr away` : ''}</div>
+                </div>
+                <button onClick={e => { e.stopPropagation(); setEditingId(g.id) }}
+                  className="opacity-40 hover:opacity-100 transition-opacity"><Pencil size={11}/></button>
+                <button onClick={e => { e.stopPropagation(); deleteGoal(g.id) }}
+                  className="opacity-40 hover:opacity-100 transition-opacity"><Trash2 size={11}/></button>
               </div>
-              <button onClick={e => { e.stopPropagation(); setEditingId(g.id) }}
-                className="opacity-40 hover:opacity-100 transition-opacity ml-1">
-                <Pencil size={11}/>
-              </button>
-              <button onClick={e => { e.stopPropagation(); deleteGoal(g.id) }}
-                className="opacity-40 hover:opacity-100 transition-opacity">
-                <Trash2 size={11}/>
-              </button>
+              {nwNow > 0 && yrsAway > 0 && (
+                <div className="flex flex-col gap-1">
+                  <div className="w-full bg-white/60 rounded-full h-1.5 overflow-hidden">
+                    <div className={`h-1.5 rounded-full transition-all ${isFunded ? 'bg-emerald-500' : 'bg-rose-400'}`}
+                      style={{ width: `${Math.round(funded)}%` }} />
+                  </div>
+                  {!isFunded && sipNeeded > 0 && (
+                    <p className="text-[10px] opacity-70">Need <span className="font-semibold">{fmtINR(sipNeeded)}/mo</span> additional SIP to fully fund</p>
+                  )}
+                </div>
+              )}
             </div>
           )
         })}

@@ -5,6 +5,7 @@ import {
 import type { AppData, NetWorthSnapshot, Transaction, Holding, Debt, Goal, Scenario, Settings } from '../types'
 import { loadData, saveData, DEFAULT_DATA } from '../lib/storage'
 import { nanoid } from '../lib/nanoid'
+import { refreshAllPrices } from '../lib/livePrice'
 
 interface AppContextValue {
   data:        AppData
@@ -44,6 +45,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setData(d)
       latestData.current = d
       setLoading(false)
+      // Auto-refresh prices on load if holdings exist
+      if (d.holdings.length > 0) {
+        refreshAllPrices(d.holdings, () => {}, (id, patch) => {
+          const current = latestData.current
+          const updated = { ...current, holdings: current.holdings.map(h => h.id === id ? { ...h, ...patch } : h) }
+          latestData.current = updated
+          setData(updated)
+          saveData(updated).catch(() => {})
+        }).catch(() => {})
+      }
     })
   }, [])
 

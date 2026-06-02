@@ -102,6 +102,8 @@ export interface Settings {
   existingSIP:     number
   monthlyEMI:      number
   lifestyleMultiplier: number
+  targetAllocation?:   Partial<Record<string, number>>
+  realEstateReturn:    number
   currency: string
 }
 

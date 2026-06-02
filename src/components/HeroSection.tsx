@@ -126,6 +126,12 @@ export default function HeroSection() {
               <span className="text-sm font-bold text-rose-500">{fmtINR(emi)}/mo</span>
             </div>
           )}
+          {nwNow > 0 && expenses > 0 && (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface-50 border border-surface-100">
+              <span className="text-[10px] font-semibold text-surface-400 uppercase tracking-wider">Runway</span>
+              <span className="text-sm font-bold text-surface-700">{Math.floor(nwNow / expenses)}mo</span>
+            </div>
+          )}
         </div>
       </div>
 

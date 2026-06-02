@@ -234,7 +234,8 @@ export default function FinancialArc() {
         extraMonthlySavings: levers.monthlySavings,
         annualReturn:        levers.returnRate,
         equityReturn:        levers.returnRate,
-        monthlyExpenses:     levers.expenses,
+        // EMI reduces investable surplus — treated as a fixed expense
+        monthlyExpenses:     levers.expenses + settings.monthlyEMI,
       },
     }
   }

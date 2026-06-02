@@ -34,6 +34,7 @@ export const DEMO_DATA: AppData = {
     monthlyIncome:       200000,
     existingSIP:         30000,
     monthlyEMI:          0,
+    realEstateReturn:    5,
     lifestyleMultiplier: 1.0,
     currency:            'INR',
   },

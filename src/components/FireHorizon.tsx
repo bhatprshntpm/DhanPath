@@ -116,8 +116,9 @@ export default function FireHorizon() {
   ]
 
   const advancedSliders = [
-    { label: 'Safe Withdrawal Rate', key: 'safeWithdrawalRate', value: settings.safeWithdrawalRate, min: 2, max: 6,  step: 0.1, suffix: '%', hint: 'Annual % you can withdraw without depleting corpus. 4% is the standard.' },
-    { label: 'Inflation Rate',       key: 'inflationRate',      value: settings.inflationRate,      min: 0, max: 15, step: 0.5, suffix: '%', hint: 'Assumed annual rise in cost of living. Historical India average: 5–7%.' },
+    { label: 'Safe Withdrawal Rate', key: 'safeWithdrawalRate', value: settings.safeWithdrawalRate, min: 2,  max: 6,  step: 0.1, suffix: '%', hint: 'Annual % you can withdraw without depleting corpus. 4% is the standard.' },
+    { label: 'Inflation Rate',       key: 'inflationRate',      value: settings.inflationRate,      min: 0,  max: 15, step: 0.5, suffix: '%', hint: 'Historical India average: 5–7%.' },
+    { label: 'Real Estate Growth',   key: 'realEstateReturn',   value: settings.realEstateReturn ?? 5, min: 0, max: 15, step: 0.5, suffix: '%', hint: 'Annual appreciation on property value. Historical India average: 5–8%.' },
   ]
 
   return (

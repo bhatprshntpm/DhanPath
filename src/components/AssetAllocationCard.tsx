@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChevronDown, ChevronRight, Plus, Trash2, RefreshCw, AlertTriangle } from 'lucide-react'
+import { ChevronDown, ChevronRight, Plus, Trash2, RefreshCw, AlertTriangle, Settings2 } from 'lucide-react'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
 import { useApp } from '../context/AppContext'
 import { fmtINR, fmtPct } from '../lib/calc'
@@ -54,9 +54,11 @@ function holdingSubType(h: Holding): string {
 }
 
 export default function AssetAllocationCard() {
-  const { data, addHolding, deleteHolding, updateHolding } = useApp()
+  const { data, addHolding, deleteHolding, updateHolding, updateSettings } = useApp()
   const [expandedClass, setExpandedClass] = useState<string | null>(null)
   const [showAddForm,   setShowAddForm]   = useState(false)
+  const [showTargetForm,setShowTargetForm] = useState(false)
+  const [targetDraft,   setTargetDraft]   = useState<Record<string,number>>({})
   const [refreshing,    setRefreshing]    = useState(false)
   const [refreshProgress, setRefreshProgress] = useState({ done: 0, total: 0 })
   const [refreshResult, setRefreshResult] = useState<{ updated: number; failed: number } | null>(null)
@@ -169,6 +171,13 @@ export default function AssetAllocationCard() {
                 : 'Refresh prices'}
             </button>
           )}
+          <button onClick={() => {
+              setTargetDraft(Object.fromEntries(Object.entries(data.settings.targetAllocation ?? { Equity: 60, Debt: 20, Gold: 10, 'EPF / NPS / PPF': 10 }).map(([k,v]) => [k, v ?? 0])))
+              setShowTargetForm(v => !v)
+            }}
+            className="btn-ghost flex items-center gap-1 text-xs">
+            <Settings2 size={12}/> Target
+          </button>
           <button onClick={() => setShowAddForm(v => !v)}
             className="btn-ghost flex items-center gap-1 text-xs">
             <Plus size={13}/> Add
@@ -194,6 +203,32 @@ export default function AssetAllocationCard() {
       )}
 
       {/* Add form */}
+      {/* Target allocation editor */}
+      {showTargetForm && (
+        <div className="flex flex-col gap-3 p-3 bg-surface-50 rounded-xl border border-surface-100 animate-fade-up">
+          <p className="text-xs font-semibold text-surface-600">Set Target Allocation (%)</p>
+          <div className="grid grid-cols-2 gap-2">
+            {Object.entries(targetDraft).map(([cls, val]) => (
+              <div key={cls} className="flex items-center gap-2">
+                <span className="text-[10px] text-surface-500 flex-1 truncate">{cls}</span>
+                <input type="number" min={0} max={100} value={val}
+                  onChange={e => setTargetDraft(d => ({ ...d, [cls]: parseFloat(e.target.value) || 0 }))}
+                  className="input-field text-xs w-16 text-right py-1" />
+                <span className="text-[10px] text-surface-300">%</span>
+              </div>
+            ))}
+          </div>
+          <p className="text-[10px] text-surface-300">
+            Total: {Object.values(targetDraft).reduce((a,b)=>a+b,0).toFixed(0)}% (aim for 100%)
+          </p>
+          <div className="flex gap-2">
+            <button onClick={() => setShowTargetForm(false)} className="btn-ghost flex-1 text-xs">Cancel</button>
+            <button onClick={() => { updateSettings({ targetAllocation: targetDraft }); setShowTargetForm(false) }}
+              className="btn-primary flex-1 text-xs">Save Target</button>
+          </div>
+        </div>
+      )}
+
       {showAddForm && (
         <form onSubmit={submit} className="flex flex-col gap-2 p-3 bg-surface-50 rounded-xl border border-surface-100 animate-fade-up">
           <div className="grid grid-cols-2 gap-2">
@@ -259,13 +294,49 @@ export default function AssetAllocationCard() {
                 </PieChart>
               </ResponsiveContainer>
               <div className="flex flex-wrap gap-x-3 gap-y-1">
-                {pieData.map(d => (
-                  <span key={d.name} className="flex items-center gap-1 text-[10px] text-surface-600">
-                    <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: d.color }}/>
-                    {d.name} {total > 0 ? `${((d.value / total) * 100).toFixed(0)}%` : ''}
-                  </span>
-                ))}
+                {pieData.map(d => {
+                  const actualPct = total > 0 ? (d.value / total) * 100 : 0
+                  const targetPct = (data.settings.targetAllocation ?? {})[d.name]
+                  const drift     = targetPct != null ? actualPct - targetPct : null
+                  return (
+                    <span key={d.name} className="flex items-center gap-1 text-[10px] text-surface-600">
+                      <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: d.color }}/>
+                      {d.name} {actualPct.toFixed(0)}%
+                      {drift != null && Math.abs(drift) > 2 && (
+                        <span className={`text-[9px] font-semibold ${drift > 0 ? 'text-rose-400' : 'text-emerald-500'}`}>
+                          {drift > 0 ? `+${drift.toFixed(0)}` : drift.toFixed(0)}
+                        </span>
+                      )}
+                    </span>
+                  )
+                })}
               </div>
+            </div>
+          )}
+
+          {/* Target allocation drift bars */}
+          {data.settings.targetAllocation && total > 0 && Object.keys(data.settings.targetAllocation).length > 0 && (
+            <div className="flex flex-col gap-1.5 p-3 bg-surface-50 rounded-xl">
+              <p className="text-[10px] uppercase tracking-widest font-semibold text-surface-300 mb-0.5">vs Target</p>
+              {Object.entries(data.settings.targetAllocation).map(([cls, tgt]) => {
+                const actual = total > 0 ? ((buckets[cls] ?? 0) / total) * 100 : 0
+                const drift  = actual - (tgt ?? 0)
+                const color  = ASSET_COLORS[cls] ?? '#d6d3d1'
+                return (
+                  <div key={cls} className="flex items-center gap-2">
+                    <span className="text-[10px] text-surface-500 w-24 shrink-0 truncate">{cls}</span>
+                    <div className="flex-1 relative h-1.5 bg-surface-100 rounded-full overflow-visible">
+                      <div className="absolute h-1.5 rounded-full" style={{ width: `${Math.min(actual,100)}%`, background: color, opacity: 0.7 }} />
+                      <div className="absolute top-1/2 -translate-y-1/2 w-0.5 h-3 bg-surface-500 rounded-full" style={{ left: `${tgt}%` }} />
+                    </div>
+                    <span className={`text-[10px] font-mono w-16 text-right shrink-0 font-semibold
+                      ${Math.abs(drift) > 5 ? (drift > 0 ? 'text-rose-500' : 'text-emerald-600') : 'text-surface-400'}`}>
+                      {actual.toFixed(0)}% {Math.abs(drift) > 1 ? `(${drift > 0 ? '+' : ''}${drift.toFixed(0)})` : '✓'}
+                    </span>
+                  </div>
+                )
+              })}
+              <p className="text-[9px] text-surface-300 mt-1">│ = target · red overweight · green underweight</p>
             </div>
           )}
 

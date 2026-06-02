@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react'
 import {
   ChevronDown, ChevronRight, Upload, CheckCircle, Loader2, X,
-  RefreshCw, RotateCcw, TrendingUp, Landmark, Coins, DollarSign, Wallet,
+  RefreshCw, RotateCcw, TrendingUp, Landmark, Coins, DollarSign, Wallet, Building2,
 } from 'lucide-react'
 import ImportCard from './ImportCard'
 import DebtCard from './DebtCard'
@@ -417,6 +417,71 @@ function RetirementContent() {
   )
 }
 
+
+// ─── Fixed Deposits ───────────────────────────────────────────────────────────
+function FDContent() {
+  const { data, addHolding, deleteHolding } = useApp()
+  const fdHoldings = data.holdings.filter(h => h.subType === 'Fixed Deposit')
+  const [bank,   setBank]   = useState('')
+  const [amount, setAmount] = useState('')
+  const [rate,   setRate]   = useState('')
+  const [months, setMonths] = useState('')
+  const [saved,  setSaved]  = useState(false)
+
+  function save() {
+    if (!bank || !amount || !rate || !months) return
+    const principal = parseFloat(amount)
+    const r         = parseFloat(rate) / 100
+    const m         = parseInt(months)
+    const maturity  = Math.round(principal * Math.pow(1 + r / 4, m / 3))
+    addHolding({ name: `FD — ${bank}`, ticker: `FD-${bank.toUpperCase().replace(/\s/g,'')}`,
+      type: 'bond', assetClass: 'Debt', subType: 'Fixed Deposit',
+      qty: 1, lastPrice: maturity, value: maturity, costBasis: principal })
+    setSaved(true)
+    setTimeout(() => { setSaved(false); setBank(''); setAmount(''); setRate(''); setMonths('') }, 2000)
+  }
+
+  const maturityPreview = amount && rate && months
+    ? Math.round(parseFloat(amount) * Math.pow(1 + parseFloat(rate) / 100 / 4, parseInt(months) / 3))
+    : 0
+
+  return (
+    <div className="flex flex-col gap-4">
+      <p className="text-xs text-surface-400">Add FDs — maturity value auto-computed (quarterly compounding).</p>
+      {fdHoldings.length > 0 && (
+        <div className="flex flex-col gap-1 p-3 bg-surface-50 rounded-xl border border-surface-100">
+          <p className="text-xs font-semibold text-surface-600 mb-1">Saved FDs</p>
+          {fdHoldings.map(h => (
+            <div key={h.id} className="flex items-center justify-between">
+              <span className="text-xs text-surface-700">{h.name} · <span className="font-mono text-surface-500">{fmtINR(h.value)}</span></span>
+              <button onClick={() => deleteHolding(h.id)} className="text-[10px] text-surface-300 hover:text-rose-400 px-1.5 py-0.5 rounded border border-transparent hover:border-rose-200 transition-colors">Remove</button>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="grid grid-cols-2 gap-3">
+        <div><label className="text-xs font-semibold text-surface-400 uppercase tracking-widest block mb-1.5">Bank</label>
+          <input className="input-field" placeholder="e.g. HDFC Bank" value={bank} onChange={e => setBank(e.target.value)} /></div>
+        <div><label className="text-xs font-semibold text-surface-400 uppercase tracking-widest block mb-1.5">Principal (₹)</label>
+          <input className="input-field" type="number" placeholder="100000" value={amount} onChange={e => setAmount(e.target.value)} /></div>
+        <div><label className="text-xs font-semibold text-surface-400 uppercase tracking-widest block mb-1.5">Rate (%)</label>
+          <input className="input-field" type="number" placeholder="7.1" value={rate} onChange={e => setRate(e.target.value)} /></div>
+        <div><label className="text-xs font-semibold text-surface-400 uppercase tracking-widest block mb-1.5">Tenure (months)</label>
+          <input className="input-field" type="number" placeholder="12" value={months} onChange={e => setMonths(e.target.value)} /></div>
+      </div>
+      {maturityPreview > 0 && (
+        <p className="text-xs text-emerald-600 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">
+          Maturity: <span className="font-semibold">{fmtINR(maturityPreview)}</span>
+        </p>
+      )}
+      <button onClick={save} disabled={!bank || !amount || !rate || !months}
+        className="btn-primary disabled:opacity-40 flex items-center justify-center gap-2">
+        {saved ? <><CheckCircle size={14}/> Saved!</> : 'Add Fixed Deposit'}
+      </button>
+    </div>
+  )
+}
+
 // ─── Crypto ───────────────────────────────────────────────────────────────────
 const CRYPTO_LIST = [
   { symbol: 'BTC', name: 'Bitcoin' }, { symbol: 'ETH', name: 'Ethereum' },
@@ -539,6 +604,7 @@ export default function DataManagement() {
   const epfHoldings    = data.holdings.filter(h => h.subType === 'EPF')
   const ppfHoldings    = data.holdings.filter(h => ['PPF','NPS','VPF','Gratuity','Pension'].includes(h.subType ?? ''))
   const cryptoCount    = data.holdings.filter(h => h.type === 'crypto').length
+  const fdHoldingsMain = data.holdings.filter(h => h.subType === 'Fixed Deposit')
 
   function handleResetAll() {
     if (!confirmingReset) { setConfirmingReset(true); return }
@@ -602,6 +668,12 @@ export default function DataManagement() {
             connected={cryptoCount > 0} statusLabel={cryptoCount > 0 ? `${cryptoCount} coin${cryptoCount > 1 ? 's' : ''}` : 'Not added — add manually'}
             onClear={cryptoCount > 0 ? () => replaceData({ ...data, holdings: data.holdings.filter(h => h.type !== 'crypto') }) : undefined}>
             <CryptoContent />
+          </SourceRow>
+
+          <SourceRow icon={<Building2 size={15} />} label="Fixed Deposits" color="teal"
+            connected={fdHoldingsMain.length > 0} statusLabel={fdHoldingsMain.length > 0 ? `${fdHoldingsMain.length} FD${fdHoldingsMain.length > 1 ? 's' : ''} · ${fmtINR(fdHoldingsMain.reduce((a,h)=>a+h.value,0))}` : 'Not added — enter manually'}
+            onClear={fdHoldingsMain.length > 0 ? () => replaceData({ ...data, holdings: data.holdings.filter(h => h.subType !== 'Fixed Deposit') }) : undefined}>
+            <FDContent />
           </SourceRow>
 
           {/* Other tools */}
