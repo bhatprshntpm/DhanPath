@@ -118,7 +118,9 @@ export async function loadData(): Promise<AppData> {
     if (!raw) return DEFAULT_DATA
     return {
       snapshots:    raw.snapshots    ?? [],
-      transactions: raw.transactions ?? [],
+      transactions: (raw.transactions ?? []).filter(
+        (t: any) => !(t.category === 'Savings' && typeof t.note === 'string' && t.note.startsWith('EPF'))
+      ),
       holdings:     raw.holdings     ?? [],
       debts:        raw.debts        ?? [],
       goals:        raw.goals        ?? [],

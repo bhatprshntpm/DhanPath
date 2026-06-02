@@ -170,16 +170,8 @@ export function epfToSnapshot(result: EPFParseResult): Omit<NetWorthSnapshot, 'i
   }
 }
 
-export function epfToTransactions(result: EPFParseResult): Omit<Transaction, 'id'>[] {
-  return result.entries
-    .filter(e => e.month)
-    .map(e => ({
-      date:     `${e.month}-01`,
-      amount:   e.employeeShare + e.employerShare,
-      category: 'Savings',
-      type:     'expense' as const,
-      note:     `EPF — Emp: ₹${e.employeeShare} + Er: ₹${e.employerShare}`,
-    }))
+export function epfToTransactions(_result: EPFParseResult): Omit<Transaction, 'id'>[] {
+  return []
 }
 
 export function epfToHolding(result: EPFParseResult): import('../types').Holding {
