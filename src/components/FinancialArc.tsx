@@ -174,32 +174,32 @@ export default function FinancialArc() {
   const projFull   = baseline ? projectLifetime(nwNow, settings, baseline, goals) : []
   const projSimple = baseline ? projectLifetimeNoGoals(nwNow, settings, baseline) : []
 
-  const startYear  = rows.length ? parseInt(rows[0].s.date.slice(0, 4)) : currentYear
+  const currentMonth = new Date().toISOString().slice(0, 7)
+
+  // Only count past/current snapshots for the history window
+  const pastRows   = useMemo(() => rows.filter(r => r.s.date <= currentMonth), [rows, currentMonth])
+  const startYear  = pastRows.length ? parseInt(pastRows[0].s.date.slice(0, 4)) : currentYear
   const endYear    = currentYear + (settings.lifeExpectancy - settings.currentAge)
   const retireYear = currentYear + (settings.retirementAge - settings.currentAge)
 
   // View window
-  const windowEnd = view === '5yr' ? currentYear + 5 : view === '10yr' ? currentYear + 10 : endYear
+  const windowEnd   = view === '5yr' ? currentYear + 5 : view === '10yr' ? currentYear + 10 : endYear
   const windowStart = Math.min(startYear, currentYear - 1)
 
-  // Build chart data — use nwNow for current year to match hero
+  // Build chart data — only use snapshots up to today; use live nwNow for current year
   const allChartData = useMemo(() => {
     const yearMap = new Map<number, any>()
     for (let y = startYear; y <= endYear; y++) {
       yearMap.set(y, { year: y, age: settings.currentAge + (y - currentYear) })
     }
-
-    // Historical: use carry-forward adjusted values from snapshots
     rows.forEach(({ adjustedNw, s }) => {
+      if (s.date > currentMonth) return   // skip future EPF passbook entries
       const yr = parseInt(s.date.slice(0, 4))
       const pt = yearMap.get(yr)
       if (pt && (pt.actual == null || adjustedNw > pt.actual)) pt.actual = adjustedNw
     })
-
-    // Override current year with live nwNow so it matches the hero section
     const curPt = yearMap.get(currentYear)
     if (curPt && nwNow > 0) curPt.actual = nwNow
-
     projSimple.forEach(p => {
       const pt = yearMap.get(p.year)
       if (pt && p.year >= currentYear) pt.potential = p.value
@@ -212,9 +212,8 @@ export default function FinancialArc() {
         pt.goalNames = p.goalNames
       }
     })
-
     return Array.from(yearMap.values()).sort((a, b) => a.year - b.year)
-  }, [rows, projSimple, projFull, startYear, endYear, currentYear, settings, nwNow])
+  }, [rows, projSimple, projFull, startYear, endYear, currentYear, currentMonth, settings, nwNow])
 
   const chartData = allChartData.filter(d => d.year >= windowStart && d.year <= windowEnd)
 
@@ -369,7 +368,7 @@ export default function FinancialArc() {
           <button onClick={() => setShowTable(v => !v)}
             className="flex items-center gap-1.5 text-xs font-medium text-surface-400 hover:text-surface-700 transition-colors">
             {showTable ? <ChevronDown size={12}/> : <ChevronRight size={12}/>}
-            Month-by-month breakdown ({rows.length} imports)
+            Month-by-month history ({rows.filter(r => r.s.date <= currentMonth).length} months recorded)
           </button>
           {showTable && <SnapshotTable rows={rows} />}
         </div>
