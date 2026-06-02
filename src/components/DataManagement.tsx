@@ -5,8 +5,7 @@ import {
 } from 'lucide-react'
 import ImportCard from './ImportCard'
 import DebtCard from './DebtCard'
-import SipCalculator from './SipCalculator'
-import ScenarioPanel from './ScenarioPanel'
+
 import PortfolioBreakdown from './PortfolioBreakdown'
 import { parseZerodhaXLSX, zerodhaToHoldings, zerodhaToSnapshot } from '../lib/zerodhaXLSXParser'
 import type { ZerodhaParseResult } from '../lib/zerodhaXLSXParser'
@@ -682,14 +681,12 @@ export default function DataManagement() {
               onClick={() => setShowExtra(v => !v)}
               className="flex items-center gap-1.5 text-xs font-medium text-surface-400 hover:text-surface-700 transition-colors mb-3">
               {showExtra ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-              Other tools — Loans · Scenarios · SIP Calculator · Import (CAS / Bank)
+              Other tools — Loans · Import (CAS / Bank)
             </button>
             {showExtra && (
               <div className="flex flex-col gap-6 animate-fade-up">
                 <section id="section-import"><ImportCard /></section>
                 <section id="section-debt"><DebtCard /></section>
-                <section id="section-scenarios"><ScenarioPanel /></section>
-                <SipCalculator />
               </div>
             )}
           </div>

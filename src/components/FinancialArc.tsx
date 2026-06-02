@@ -4,7 +4,7 @@ import {
   ReferenceLine, XAxis, YAxis, Tooltip,
   ResponsiveContainer, CartesianGrid,
 } from 'recharts'
-import { ChevronDown, ChevronRight, RotateCcw } from 'lucide-react'
+import { ChevronDown, ChevronRight, RotateCcw, Zap } from 'lucide-react'
 import { useApp } from '../context/AppContext'
 import {
   projectLifetime, fireNumber,
@@ -143,30 +143,29 @@ function SnapshotTable({ rows }: { rows: ReturnType<typeof applyCarryForward> })
   )
 }
 
-// ─── compact lever slider ────────────────────────────────────────────────────
-function LeverSlider({ label, value, min, max, step, prefix, suffix, color, onChange }: {
+// ─── compact slider ──────────────────────────────────────────────────────────
+function Slider({ label, value, min, max, step, prefix, suffix, onChange }: {
   label: string; value: number; min: number; max: number; step: number
-  prefix?: string; suffix?: string; color: 'amber' | 'green'
+  prefix?: string; suffix?: string
   onChange: (v: number) => void
 }) {
   const fill = ((value - min) / (max - min)) * 100
-  const trackColor = color === 'amber' ? '#f59e0b' : '#10b981'
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex justify-between items-center">
         <span className="text-[11px] text-surface-500 font-medium">{label}</span>
-        <span className="text-[11px] font-semibold font-mono" style={{ color: trackColor }}>
+        <span className="text-[11px] font-semibold font-mono text-emerald-600">
           {prefix ?? ''}{typeof value === 'number' && value % 1 !== 0 ? value.toFixed(1) : value.toLocaleString('en-IN')}{suffix ?? ''}
         </span>
       </div>
       <div className="relative h-4 flex items-center">
         <div className="absolute inset-x-0 h-1 rounded-full bg-surface-100" />
-        <div className="absolute left-0 h-1 rounded-full pointer-events-none" style={{ width: `${fill}%`, background: trackColor }} />
+        <div className="absolute left-0 h-1 rounded-full pointer-events-none" style={{ width: `${fill}%`, background: '#10b981' }} />
         <input type="range" min={min} max={max} step={step} value={value}
           onChange={e => onChange(parseFloat(e.target.value))}
           className="absolute inset-0 w-full opacity-0 cursor-pointer h-4" style={{ zIndex: 1 }} />
         <div className="absolute w-3.5 h-3.5 rounded-full bg-white border-2 pointer-events-none"
-          style={{ left: `calc(${fill}% - 7px)`, borderColor: trackColor }} />
+          style={{ left: `calc(${fill}% - 7px)`, borderColor: '#10b981' }} />
       </div>
     </div>
   )
@@ -179,7 +178,7 @@ function fireYearFromProj(proj: { year: number; value: number }[], target: numbe
 
 // ─── main ────────────────────────────────────────────────────────────────────
 export default function FinancialArc() {
-  const { data, updateSettings } = useApp()
+  const { data } = useApp()
   const { snapshots, scenarios, settings, goals } = data
   const [view,      setView]      = useState<ViewMode>('10yr')
   const [showTable, setShowTable] = useState(false)
@@ -188,25 +187,17 @@ export default function FinancialArc() {
   const baseline     = scenarios.find(s => s.enabled && s.id === 'baseline') ?? scenarios.find(s => s.enabled)
   const baseAssump   = baseline?.assumptions
 
-  // Current state levers — seeded from saved settings/scenario
-  const [cur, setCur] = useState({
+  // What-if: extra SIP on top of existing
+  const [extraSip,   setExtraSip]   = useState(5000)
+  const [wiActive,   setWiActive]   = useState(false)
+
+  function resetWhatIf() { setExtraSip(5000); setWiActive(false) }
+
+  // Current levers derived from settings
+  const cur = {
     monthlySavings: settings.existingSIP > 0 ? settings.existingSIP : (baseAssump?.extraMonthlySavings ?? 0),
-    returnRate:     baseAssump?.annualReturn        ?? 12,
-    expenses:       settings.monthlyExpenses        ?? 60000,
-  })
-
-  // What-if levers — start as copy of current
-  const [wi,  setWi]       = useState({ ...cur })
-  const [wiActive, setWiActive] = useState(false)
-
-  // Reset what-if to current
-  function resetWhatIf() { setWi({ ...cur }); setWiActive(false) }
-
-  // Sync current lever changes back to settings/scenario
-  function updateCur(patch: Partial<typeof cur>) {
-    const next = { ...cur, ...patch }
-    setCur(next)
-    updateSettings({ monthlyExpenses: next.expenses })
+    returnRate:     baseAssump?.annualReturn ?? 12,
+    expenses:       settings.monthlyExpenses ?? 60000,
   }
 
   // Live net worth from holdings (matches hero section)
@@ -241,16 +232,15 @@ export default function FinancialArc() {
   }
 
   const curScenario = makeScenario(cur)
-  const wiScenario  = makeScenario(wi)
+  const wiLevers = { ...cur, monthlySavings: cur.monthlySavings + extraSip }
+  const wiScenario  = wiActive ? makeScenario(wiLevers) : null
 
-  const projCur      = curScenario ? projectLifetime(nwNow, settings, curScenario, goals) : []
-  const projWi       = wiScenario  ? projectLifetime(nwNow, { ...settings, monthlyExpenses: wi.expenses }, wiScenario, goals) : []
+  const projCur = curScenario ? projectLifetime(nwNow, settings, curScenario, goals) : []
+  const projWi  = wiScenario  ? projectLifetime(nwNow, settings, wiScenario,  goals) : []
 
-  // FIRE year for each
-  const fireCur = cur.expenses > 0 ? fireNumber(cur.expenses, settings.safeWithdrawalRate) : 0
-  const fireWi  = wi.expenses  > 0 ? fireNumber(wi.expenses,  settings.safeWithdrawalRate) : 0
+  const fireCur    = cur.expenses > 0 ? fireNumber(cur.expenses, settings.safeWithdrawalRate) : 0
   const fireYearCur = fireYearFromProj(projCur, fireCur)
-  const fireYearWi  = fireYearFromProj(projWi,  fireWi)
+  const fireYearWi  = projWi.length > 0 ? fireYearFromProj(projWi, fireCur) : null
   const fireAgeCur  = fireYearCur ? settings.currentAge + (fireYearCur - currentYear) : null
   const fireAgeWi   = fireYearWi  ? settings.currentAge + (fireYearWi  - currentYear) : null
   const yearsDelta  = (fireYearCur && fireYearWi) ? fireYearCur - fireYearWi : null
@@ -314,7 +304,7 @@ export default function FinancialArc() {
   const yMax = visibleValues.length ? Math.ceil(Math.max(...visibleValues) * 1.1)  : undefined
   const yDomain: [number | string, number | string] = view === 'lifetime' ? [0, 'auto'] : [yMin, yMax ?? 'auto']
 
-  const wiDiffers = wiActive && (wi.monthlySavings !== cur.monthlySavings || wi.returnRate !== cur.returnRate || wi.expenses !== cur.expenses)
+  const wiDiffers = wiActive && extraSip > 0
 
   return (
     <div className="card p-5 flex flex-col gap-4">
@@ -368,53 +358,37 @@ export default function FinancialArc() {
         </ComposedChart>
       </ResponsiveContainer>
 
-      {/* Dual lever panel */}
-      <div className="grid grid-cols-2 gap-3 pt-3 border-t border-surface-100">
-        {/* Current State */}
-        <div className="flex flex-col gap-3 p-3 bg-amber-50/60 rounded-xl border border-amber-100">
-          <div className="flex items-center justify-between">
-            <p className="text-[11px] font-semibold text-amber-700 uppercase tracking-widest">Current</p>
-            {fireAgeCur && <span className="text-[11px] font-semibold text-amber-600">FIRE age {fireAgeCur}</span>}
-          </div>
-          <LeverSlider label="Monthly Investment (SIP)" value={cur.monthlySavings} min={0} max={200000} step={1000}
-            prefix="₹" color="amber" onChange={v => updateCur({ monthlySavings: v })} />
-          <LeverSlider label="Return Rate" value={cur.returnRate} min={5} max={20} step={0.5}
-            suffix="%" color="amber" onChange={v => updateCur({ returnRate: v })} />
-          <LeverSlider label="Monthly Expenses" value={cur.expenses} min={5000} max={500000} step={1000}
-            prefix="₹" color="amber" onChange={v => updateCur({ expenses: v })} />
-        </div>
-
-        {/* What-If */}
+      {/* What-if SIP lever */}
+      <div className="pt-3 border-t border-surface-100">
         <div className="flex flex-col gap-3 p-3 bg-emerald-50/60 rounded-xl border border-emerald-100">
           <div className="flex items-center justify-between">
-            <p className="text-[11px] font-semibold text-emerald-700 uppercase tracking-widest">What-If</p>
             <div className="flex items-center gap-2">
-              {fireAgeWi && <span className="text-[11px] font-semibold text-emerald-600">FIRE age {fireAgeWi}</span>}
-              {wiDiffers && (
-                <button onClick={resetWhatIf} className="text-[10px] text-surface-400 hover:text-surface-600 flex items-center gap-0.5">
-                  <RotateCcw size={9} /> Reset
-                </button>
-              )}
+              <Zap size={13} className="text-emerald-600" />
+              <span className="text-[11px] font-semibold text-emerald-700 uppercase tracking-widest">What if I invest more?</span>
             </div>
+            {wiDiffers && (
+              <button onClick={resetWhatIf} className="text-[10px] text-surface-400 hover:text-surface-600 flex items-center gap-0.5">
+                <RotateCcw size={9} /> Reset
+              </button>
+            )}
           </div>
-          <LeverSlider label="Monthly Investment (SIP)" value={wi.monthlySavings} min={0} max={200000} step={1000}
-            prefix="₹" color="green" onChange={v => { setWi(p => ({ ...p, monthlySavings: v })); setWiActive(true) }} />
-          <LeverSlider label="Return Rate" value={wi.returnRate} min={5} max={20} step={0.5}
-            suffix="%" color="green" onChange={v => { setWi(p => ({ ...p, returnRate: v })); setWiActive(true) }} />
-          <LeverSlider label="Monthly Expenses" value={wi.expenses} min={5000} max={500000} step={1000}
-            prefix="₹" color="green" onChange={v => { setWi(p => ({ ...p, expenses: v })); setWiActive(true) }} />
+          <Slider label="Extra SIP per month" value={extraSip} min={0} max={100000} step={1000}
+            prefix="₹" onChange={v => { setExtraSip(v); setWiActive(v > 0) }} />
+          {wiDiffers && yearsDelta !== null && (
+            <div className={`flex items-center gap-2 py-1.5 px-3 rounded-lg text-xs font-semibold
+              ${yearsDelta > 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-50 text-rose-600'}`}>
+              {yearsDelta > 0
+                ? `↑ Retire ${yearsDelta} year${yearsDelta !== 1 ? 's' : ''} earlier — FIRE at age ${fireAgeWi}`
+                : `↓ Retire ${Math.abs(yearsDelta)} year${Math.abs(yearsDelta) !== 1 ? 's' : ''} later — FIRE at age ${fireAgeWi}`}
+            </div>
+          )}
+          {wiDiffers && yearsDelta === null && fireAgeWi && (
+            <div className="flex items-center gap-2 py-1.5 px-3 rounded-lg text-xs font-semibold bg-emerald-100 text-emerald-700">
+              FIRE at age {fireAgeWi}
+            </div>
+          )}
         </div>
       </div>
-
-      {/* Delta summary */}
-      {wiDiffers && yearsDelta !== null && (
-        <div className={`flex items-center justify-center gap-2 py-2 rounded-xl text-sm font-semibold
-          ${yearsDelta > 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-600'}`}>
-          {yearsDelta > 0
-            ? `✓ What-if retires ${yearsDelta} year${yearsDelta !== 1 ? 's' : ''} earlier at age ${fireAgeWi}`
-            : `✗ What-if retires ${Math.abs(yearsDelta)} year${Math.abs(yearsDelta) !== 1 ? 's' : ''} later at age ${fireAgeWi}`}
-        </div>
-      )}
 
       {/* Cash flow — lifetime only */}
       {view === 'lifetime' && chartData.some(d => d.netFlow) && (

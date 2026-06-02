@@ -146,6 +146,11 @@ export default function OnboardingWizard({ forceOpen, onClose }: { forceOpen?: b
   const [age,           setAge]           = useState(() => data.settings.currentAge ?? 28)
   const [retirementAge, setRetirementAge] = useState(() => data.settings.retirementAge ?? 55)
   const [expenses,      setExpenses]      = useState(() => data.settings.monthlyExpenses ?? 60000)
+  const [income,        setIncome]        = useState(() => data.settings.monthlyIncome   ?? 0)
+  const [sip,           setSip]           = useState(() => data.settings.existingSIP     ?? 0)
+  const [emi,           setEmi]           = useState(() => data.settings.monthlyEMI      ?? 0)
+  const [returnRate,    setReturnRate]    = useState(() => data.settings.annualReturn     ?? 12)
+  const [inflation,     setInflation]     = useState(() => data.settings.inflationRate    ?? 6)
   const [goal,          setGoal]          = useState('')
 
   const [bankZone, setBankZone]   = useState<FileZoneState>({ ...EMPTY_ZONE })
@@ -225,11 +230,16 @@ export default function OnboardingWizard({ forceOpen, onClose }: { forceOpen?: b
 
   function applyImports() {
     updateSettings({
-      name:           name || 'My Finances',
-      currentAge:     age,
-      retirementAge:  retirementAge,
+      name:            name || 'My Finances',
+      currentAge:      age,
+      retirementAge:   retirementAge,
       monthlyExpenses: expenses,
-      currency:       'INR',
+      monthlyIncome:   income,
+      existingSIP:     sip,
+      monthlyEMI:      emi,
+      annualReturn:    returnRate,
+      inflationRate:   inflation,
+      currency:        'INR',
     })
 
     const baseline = data.scenarios.find(s => s.id === 'baseline')
@@ -313,43 +323,89 @@ export default function OnboardingWizard({ forceOpen, onClose }: { forceOpen?: b
                 {steps[step].sub && <p className="text-sm text-surface-400 mt-1">{steps[step].sub}</p>}
               </div>
 
-              {/* Step 0 — Name, Age, Goal */}
+              {/* Step 0 — Profile & Financial Settings */}
               {step === 0 && (
-                <div className="flex flex-col gap-5">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-xs font-semibold text-surface-400 uppercase tracking-widest block mb-1.5">Name</label>
-                      <input className="input-field" placeholder="e.g. Prashant"
-                        value={name} onChange={e => setName(e.target.value)} />
-                    </div>
-                    <div>
-                      <label className="text-xs font-semibold text-surface-400 uppercase tracking-widest block mb-1.5">Current Age</label>
-                      <input className="input-field" type="number" min={18} max={80}
-                        value={age} onChange={e => setAge(parseInt(e.target.value) || 28)} />
-                    </div>
-                    <div>
-                      <label className="text-xs font-semibold text-surface-400 uppercase tracking-widest block mb-1.5">Target Retirement Age</label>
-                      <input className="input-field" type="number" min={30} max={80}
-                        value={retirementAge} onChange={e => setRetirementAge(parseInt(e.target.value) || 55)} />
-                    </div>
-                    <div>
-                      <label className="text-xs font-semibold text-surface-400 uppercase tracking-widest block mb-1.5">Monthly Expenses (₹)</label>
-                      <input className="input-field" type="number" min={1000}
-                        value={expenses} onChange={e => setExpenses(parseInt(e.target.value) || 60000)} />
+                <div className="flex flex-col gap-6">
+
+                  {/* Personal */}
+                  <div>
+                    <p className="text-xs font-semibold text-surface-400 uppercase tracking-widest mb-3">Personal</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div><label className="text-xs text-surface-400 block mb-1.5">Your Name</label>
+                        <input className="input-field" placeholder="e.g. Prashant" value={name} onChange={e => setName(e.target.value)} /></div>
+                      <div><label className="text-xs text-surface-400 block mb-1.5">Current Age</label>
+                        <input className="input-field" type="number" min={18} max={80} value={age} onChange={e => setAge(parseInt(e.target.value) || 28)} /></div>
+                      <div><label className="text-xs text-surface-400 block mb-1.5">Target Retirement Age</label>
+                        <input className="input-field" type="number" min={30} max={80} value={retirementAge} onChange={e => setRetirementAge(parseInt(e.target.value) || 55)} /></div>
+                      <div><label className="text-xs text-surface-400 block mb-1.5">Life Expectancy</label>
+                        <input className="input-field" type="number" min={60} max={120} value={data.settings.lifeExpectancy ?? 85} onChange={e => updateSettings({ lifeExpectancy: parseInt(e.target.value) || 85 })} /></div>
                     </div>
                   </div>
 
+                  {/* Monthly Cash Flow */}
                   <div>
-                    <label className="text-xs font-semibold text-surface-400 uppercase tracking-widest block mb-2">
-                      Primary Financial Goal
-                    </label>
+                    <p className="text-xs font-semibold text-surface-400 uppercase tracking-widest mb-1">Monthly Cash Flow</p>
+                    <p className="text-[11px] text-surface-300 mb-3">These numbers drive all projections. Set them once, update when life changes.</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div><label className="text-xs text-surface-400 block mb-1.5">Take-home Income (₹)</label>
+                        <input className="input-field" type="number" placeholder="e.g. 150000" value={income || ''} onChange={e => setIncome(parseInt(e.target.value) || 0)} /></div>
+                      <div><label className="text-xs text-surface-400 block mb-1.5">Monthly Expenses (₹)</label>
+                        <input className="input-field" type="number" placeholder="e.g. 60000" value={expenses || ''} onChange={e => setExpenses(parseInt(e.target.value) || 0)} /></div>
+                      <div>
+                        <label className="text-xs text-surface-400 block mb-1.5">Existing SIP / Auto-invest (₹)</label>
+                        <input className="input-field" type="number" placeholder="e.g. 25000" value={sip || ''} onChange={e => setSip(parseInt(e.target.value) || 0)} />
+                        <p className="text-[10px] text-surface-300 mt-1">Total monthly going into MFs/ETFs</p>
+                      </div>
+                      <div>
+                        <label className="text-xs text-surface-400 block mb-1.5">Total EMIs (₹)</label>
+                        <input className="input-field" type="number" placeholder="e.g. 20000" value={emi || ''} onChange={e => setEmi(parseInt(e.target.value) || 0)} />
+                        <p className="text-[10px] text-surface-300 mt-1">All loan EMIs combined</p>
+                      </div>
+                    </div>
+                    {income > 0 && expenses > 0 && (
+                      <div className="mt-3 grid grid-cols-3 gap-2">
+                        <div className="p-2.5 bg-emerald-50 rounded-xl text-center">
+                          <p className="text-[10px] text-surface-400">Surplus</p>
+                          <p className="text-sm font-bold text-emerald-600">₹{Math.max(0, income - expenses - emi).toLocaleString('en-IN')}</p>
+                        </div>
+                        <div className="p-2.5 bg-amber-50 rounded-xl text-center">
+                          <p className="text-[10px] text-surface-400">Savings Rate</p>
+                          <p className="text-sm font-bold text-amber-600">{income > 0 ? Math.round(((income - expenses - emi) / income) * 100) : 0}%</p>
+                        </div>
+                        <div className="p-2.5 bg-surface-50 rounded-xl text-center">
+                          <p className="text-[10px] text-surface-400">Invests</p>
+                          <p className="text-sm font-bold text-surface-700">{income > 0 ? Math.round((sip / income) * 100) : 0}%</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Assumptions */}
+                  <div>
+                    <p className="text-xs font-semibold text-surface-400 uppercase tracking-widest mb-1">Assumptions</p>
+                    <p className="text-[11px] text-surface-300 mb-3">Used to project your portfolio growth and FIRE date.</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-xs text-surface-400 block mb-1.5">Expected Annual Return (%)</label>
+                        <input className="input-field" type="number" min={1} max={30} step={0.5} value={returnRate} onChange={e => setReturnRate(parseFloat(e.target.value) || 12)} />
+                        <p className="text-[10px] text-surface-300 mt-1">Blended portfolio return. Indian equity ~12–14% historically.</p>
+                      </div>
+                      <div>
+                        <label className="text-xs text-surface-400 block mb-1.5">Inflation Rate (%)</label>
+                        <input className="input-field" type="number" min={0} max={15} step={0.5} value={inflation} onChange={e => setInflation(parseFloat(e.target.value) || 6)} />
+                        <p className="text-[10px] text-surface-300 mt-1">India average 5–7%. Affects future goal costs.</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Financial goal */}
+                  <div>
+                    <p className="text-xs font-semibold text-surface-400 uppercase tracking-widest mb-2">Primary Goal</p>
                     <div className="flex flex-col gap-2">
                       {GOALS.map(g => (
                         <button key={g.id} onClick={() => setGoal(g.id)}
-                          className={`flex items-start gap-3 p-3.5 rounded-xl border text-left transition-all
-                            ${goal === g.id
-                              ? 'border-amber-400 bg-amber-50'
-                              : 'border-surface-100 hover:border-surface-200 bg-white'}`}>
+                          className={`flex items-start gap-3 p-3 rounded-xl border text-left transition-all
+                            ${goal === g.id ? 'border-amber-400 bg-amber-50' : 'border-surface-100 hover:border-surface-200 bg-white'}`}>
                           <div className={`w-4 h-4 rounded-full border-2 mt-0.5 shrink-0 transition-all
                             ${goal === g.id ? 'border-amber-500 bg-amber-500' : 'border-surface-300'}`} />
                           <div>
