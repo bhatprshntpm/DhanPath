@@ -31,7 +31,7 @@ const DEFAULT_SETTINGS: Settings = {
   monthlyIncome:       0,
   existingSIP:         0,
   monthlyEMI:          0,
-  targetAllocation:    { Equity: 60, Debt: 20, Gold: 10, 'EPF / NPS / PPF': 10 },
+  targetAllocation:    {},
   realEstateReturn:    5,
   lifestyleMultiplier: 1.0,
   currency:            'INR',

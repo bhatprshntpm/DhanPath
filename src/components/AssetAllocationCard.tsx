@@ -172,7 +172,13 @@ export default function AssetAllocationCard() {
             </button>
           )}
           <button onClick={() => {
-              setTargetDraft(Object.fromEntries(Object.entries(data.settings.targetAllocation ?? { Equity: 60, Debt: 20, Gold: 10, 'EPF / NPS / PPF': 10 }).map(([k,v]) => [k, v ?? 0])))
+              // Seed from all classes that have actual assets OR already have a target
+              const existing = data.settings.targetAllocation ?? {}
+              const draft = Object.fromEntries(
+                [...new Set([...Object.keys(buckets).filter(k => buckets[k] > 0), ...Object.keys(existing)])]
+                  .map(k => [k, existing[k] ?? 0])
+              )
+              setTargetDraft(draft)
               setShowTargetForm(v => !v)
             }}
             className="btn-ghost flex items-center gap-1 text-xs">
