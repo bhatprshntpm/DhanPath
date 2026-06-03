@@ -422,7 +422,7 @@ function NPSUploadSection() {
           ? <><Loader2 size={20} className="text-indigo-400 animate-spin" /><p className="text-xs text-surface-400">Parsing NPS statement…</p></>
           : <><Upload size={20} className="text-surface-300 group-hover:text-indigo-400 transition-colors" />
               <p className="text-xs font-medium text-surface-500">Drop Protean CRA PDF here or click to browse</p>
-              <p className="text-[10px] text-surface-300">Download from cra.nps-proteantech.in → Statement of Holding</p></>
+              <p className="text-[10px] text-surface-300">cra.nps-proteantech.in → Account Statement → Holding Statement</p></>
         }
       </div>
 
