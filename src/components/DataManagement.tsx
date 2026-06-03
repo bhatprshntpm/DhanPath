@@ -13,6 +13,8 @@ import { parseFidelityPDF, fidelityToHoldings } from '../lib/fidelityPDFParser'
 import type { FidelityParseResult } from '../lib/fidelityPDFParser'
 import { parseEPFPDF, epfToSnapshot, epfToTransactions, epfToHolding, epfToMonthlySnapshots } from '../lib/epfParser'
 import type { EPFParseResult } from '../lib/epfParser'
+import { parseNPSPDF, npsToHoldings } from '../lib/npsParser'
+import type { NPSParseResult } from '../lib/npsParser'
 import { useApp } from '../context/AppContext'
 import { DEFAULT_DATA } from '../lib/storage'
 import { fmtINR } from '../lib/calc'
@@ -369,16 +371,127 @@ function EPFContent() {
 }
 
 // ─── PPF / NPS ────────────────────────────────────────────────────────────────
-const RETIREMENT_TYPES = [
+const MANUAL_TYPES = [
   { id: 'PPF',      label: 'PPF',           hint: 'Public Provident Fund' },
-  { id: 'NPS',      label: 'NPS',           hint: 'National Pension Scheme' },
   { id: 'VPF',      label: 'VPF',           hint: 'Voluntary Provident Fund' },
   { id: 'Gratuity', label: 'Gratuity',      hint: 'Employer gratuity' },
   { id: 'Pension',  label: 'Pension Corpus',hint: 'Other pension fund' },
 ]
 
+function NPSUploadSection() {
+  const { data, replaceData } = useApp()
+  const fileRef                           = useRef<HTMLInputElement>(null)
+  const [result,  setResult]  = useState<NPSParseResult | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [saved,   setSaved]   = useState(false)
+
+  const existing = data.holdings.filter(h => h.subType === 'NPS')
+
+  async function handleFile(file: File) {
+    setLoading(true); setResult(null); setSaved(false)
+    const r = await parseNPSPDF(file)
+    setResult(r)
+    setLoading(false)
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault()
+    const f = e.dataTransfer.files[0]
+    if (f?.type === 'application/pdf') handleFile(f)
+  }
+
+  function save() {
+    if (!result || result.status !== 'success') return
+    const newHoldings = npsToHoldings(result)
+    const withoutOld  = data.holdings.filter(h => h.subType !== 'NPS')
+    replaceData({ ...data, holdings: [...withoutOld, ...newHoldings.map(h => ({ ...h, id: Math.random().toString(36).slice(2) }))] })
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2500)
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      {/* Upload zone */}
+      <div
+        onDrop={handleDrop} onDragOver={e => e.preventDefault()}
+        onClick={() => fileRef.current?.click()}
+        className="border-2 border-dashed border-surface-200 hover:border-indigo-300 rounded-xl p-5 flex flex-col items-center gap-2 cursor-pointer transition-colors group">
+        <input ref={fileRef} type="file" accept="application/pdf" className="hidden"
+          onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = '' }} />
+        {loading
+          ? <><Loader2 size={20} className="text-indigo-400 animate-spin" /><p className="text-xs text-surface-400">Parsing NPS statement…</p></>
+          : <><Upload size={20} className="text-surface-300 group-hover:text-indigo-400 transition-colors" />
+              <p className="text-xs font-medium text-surface-500">Drop Protean CRA PDF here or click to browse</p>
+              <p className="text-[10px] text-surface-300">Download from cra.nps-proteantech.in → Statement of Holding</p></>
+        }
+      </div>
+
+      {/* Existing NPS holdings */}
+      {existing.length > 0 && !result && (
+        <div className="bg-indigo-50/60 rounded-xl p-3 flex flex-col gap-1.5">
+          <p className="text-[10px] uppercase tracking-widest font-semibold text-indigo-400">Current NPS</p>
+          {existing.map(h => (
+            <div key={h.id} className="flex justify-between text-xs">
+              <span className="text-surface-600">{h.name}</span>
+              <span className="font-mono font-medium text-surface-800">₹{h.value.toLocaleString('en-IN')}</span>
+            </div>
+          ))}
+          <div className="flex justify-between text-xs border-t border-indigo-100 pt-1.5 mt-0.5">
+            <span className="font-semibold text-surface-700">Total</span>
+            <span className="font-mono font-semibold text-indigo-700">₹{existing.reduce((a,h)=>a+h.value,0).toLocaleString('en-IN')}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Parse result preview */}
+      {result && (
+        <div className={`rounded-xl p-4 flex flex-col gap-3 ${result.status === 'success' ? 'bg-emerald-50/60 border border-emerald-100' : 'bg-rose-50/60 border border-rose-100'}`}>
+          {result.status !== 'success'
+            ? <p className="text-xs text-rose-600">{result.message}</p>
+            : <>
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="text-xs font-semibold text-surface-700">{result.subscriberName}</p>
+                    <p className="text-[10px] text-surface-400">PRAN {result.pran} · {result.statementDate}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-bold text-emerald-700">₹{result.tier1Total.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</p>
+                    <p className="text-[10px] text-surface-400">Tier I corpus</p>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  {result.schemes.map(s => (
+                    <div key={s.key} className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white
+                          ${s.key==='E' ? 'bg-emerald-500' : s.key==='C' ? 'bg-blue-500' : s.key==='G' ? 'bg-amber-500' : 'bg-purple-500'}`}>
+                          {s.key}
+                        </span>
+                        <span className="text-surface-600">{s.label}</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="font-mono font-medium text-surface-800">₹{s.value.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+                        <span className="text-surface-300 ml-1.5">· {s.units.toFixed(4)} units @ {s.nav}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <button onClick={save} className="btn-primary flex items-center justify-center gap-2 mt-1">
+                  {saved ? <><CheckCircle size={14} /> Saved!</> : existing.length > 0 ? 'Update NPS Holdings' : 'Import NPS Holdings'}
+                </button>
+              </>
+          }
+        </div>
+      )}
+    </div>
+  )
+}
+
 function RetirementContent() {
   const { addHolding } = useApp()
+  const [tab,       setTab]       = useState<'nps' | 'manual'>('nps')
   const [type,      setType]      = useState('PPF')
   const [balance,   setBalance]   = useState('')
   const [costBasis, setCostBasis] = useState('')
@@ -393,25 +506,42 @@ function RetirementContent() {
 
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-xs text-surface-400">Update your PPF / NPS balance manually every quarter.</p>
-      <div className="flex gap-2 flex-wrap">
-        {RETIREMENT_TYPES.map(t => (
-          <button key={t.id} onClick={() => setType(t.id)}
-            className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors
-              ${type === t.id ? 'border-amber-400 bg-amber-50 text-amber-700' : 'border-surface-200 text-surface-500 hover:border-amber-300'}`}>
-            {t.label} <span className="text-surface-300 font-normal">· {t.hint}</span>
+      {/* Tab switcher */}
+      <div className="flex bg-surface-100 rounded-lg p-0.5 gap-0.5 w-fit">
+        {([['nps', 'NPS Statement (PDF)'], ['manual', 'Manual Entry']] as const).map(([k, l]) => (
+          <button key={k} onClick={() => setTab(k)}
+            className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors
+              ${tab === k ? 'bg-white text-surface-800 shadow-sm' : 'text-surface-400 hover:text-surface-600'}`}>
+            {l}
           </button>
         ))}
       </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div><label className="text-xs font-semibold text-surface-400 uppercase tracking-widest block mb-1.5">Balance (₹)</label>
-          <input className="input-field" type="number" placeholder="e.g. 450000" value={balance} onChange={e => setBalance(e.target.value)} /></div>
-        <div><label className="text-xs font-semibold text-surface-400 uppercase tracking-widest block mb-1.5">Invested (₹) <span className="normal-case font-normal">optional</span></label>
-          <input className="input-field" type="number" placeholder="e.g. 380000" value={costBasis} onChange={e => setCostBasis(e.target.value)} /></div>
-      </div>
-      <button onClick={save} disabled={!balance} className="btn-primary disabled:opacity-40 flex items-center justify-center gap-2">
-        {saved ? <><CheckCircle size={14} /> Saved!</> : `Add ${type} balance`}
-      </button>
+
+      {tab === 'nps' && <NPSUploadSection />}
+
+      {tab === 'manual' && (
+        <div className="flex flex-col gap-4">
+          <p className="text-xs text-surface-400">Enter PPF / VPF / Gratuity balance manually.</p>
+          <div className="flex gap-2 flex-wrap">
+            {MANUAL_TYPES.map(t => (
+              <button key={t.id} onClick={() => setType(t.id)}
+                className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors
+                  ${type === t.id ? 'border-amber-400 bg-amber-50 text-amber-700' : 'border-surface-200 text-surface-500 hover:border-amber-300'}`}>
+                {t.label} <span className="text-surface-300 font-normal">· {t.hint}</span>
+              </button>
+            ))}
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div><label className="text-xs font-semibold text-surface-400 uppercase tracking-widest block mb-1.5">Balance (₹)</label>
+              <input className="input-field" type="number" placeholder="e.g. 450000" value={balance} onChange={e => setBalance(e.target.value)} /></div>
+            <div><label className="text-xs font-semibold text-surface-400 uppercase tracking-widest block mb-1.5">Invested (₹) <span className="normal-case font-normal">optional</span></label>
+              <input className="input-field" type="number" placeholder="e.g. 380000" value={costBasis} onChange={e => setCostBasis(e.target.value)} /></div>
+          </div>
+          <button onClick={save} disabled={!balance} className="btn-primary disabled:opacity-40 flex items-center justify-center gap-2">
+            {saved ? <><CheckCircle size={14} /> Saved!</> : `Add ${type} balance`}
+          </button>
+        </div>
+      )}
     </div>
   )
 }
