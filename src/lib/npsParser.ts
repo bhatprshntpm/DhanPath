@@ -135,12 +135,13 @@ export async function parseNPSPDF(file: File): Promise<NPSParseResult> {
 export function npsToHoldings(result: NPSParseResult): Omit<Holding, 'id'>[] {
   if (!result.schemes.length) return []
 
-  // One holding per scheme so asset allocation reflects E/C/G split
+  // All NPS schemes go into the retirement bucket regardless of E/C/G
+  // NPS is locked until age 60 — treat as retirement corpus, not liquid equity/debt
   return result.schemes.map(s => ({
     name:       `NPS ${s.label}`,
     ticker:     `NPS-${s.key}`,
     type:       'retirement' as const,
-    assetClass: s.key === 'E' ? 'Equity' : 'Debt',
+    assetClass: 'EPF / NPS / PPF',
     subType:    'NPS',
     qty:        s.units,
     lastPrice:  s.nav,
