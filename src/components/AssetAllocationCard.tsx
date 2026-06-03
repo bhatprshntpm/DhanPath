@@ -33,11 +33,11 @@ export const CLASS_HINTS: Record<string, string> = {
 }
 
 function holdingClass(h: Holding): string {
+  if (h.type === 'retirement') return 'EPF / NPS / PPF'   // always override — retirement is locked regardless of scheme
   if (h.assetClass) return h.assetClass
   if (h.type === 'stock')      return 'Equity'
   if (h.type === 'etf')        return 'Equity'
   if (h.type === 'bond')       return 'Debt'
-  if (h.type === 'retirement') return 'EPF / NPS / PPF'
   if (h.type === 'crypto')     return 'Cryptocurrency'
   if (h.type === 'cash')       return 'Cash & Savings'
   return 'Other'
