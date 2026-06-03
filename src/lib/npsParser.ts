@@ -50,25 +50,31 @@ function extractScheme(text: string, key: 'E' | 'C' | 'G' | 'A'): NPSScheme | nu
     A: 'Scheme A — Alternative Assets',
   }
 
-  // Find "SCHEME E - TIER I" (or SCHEME C / G / A)
+  // Scope search to "Account Summary For Current Schemes" section only
+  // This avoids false matches in the "Current Scheme Preference" table (which
+  // also lists SCHEME E/C/G but only with allocation percentages like 60.00%)
+  const sectionIdx = text.search(/Account\s+Summary\s+For\s+Current\s+Schemes/i)
+  const searchText = sectionIdx >= 0 ? text.slice(sectionIdx) : text
+
   const schemeRe = new RegExp(`SCHEME\\s+${key}\\s*-\\s*TIER\\s+I`, 'i')
-  const match = schemeRe.exec(text)
+  const match = schemeRe.exec(searchText)
   if (!match) return null
 
-  // Grab up to 400 chars after the match to find the number block
-  const after = text.slice(match.index + match[0].length, match.index + match[0].length + 400)
+  // Grab text after scheme name to find the number block
+  const after = searchText.slice(match.index + match[0].length, match.index + match[0].length + 400)
 
-  // Extract all decimal numbers (handles Indian comma format like 1,79,038.24)
+  // Extract all positive decimal numbers (handles Indian format: 1,79,038.24)
   const nums = [...after.matchAll(/([\d,]+\.[\d]+)/g)]
     .map(m => parseIndianNumber(m[1]))
     .filter(n => n > 0)
 
-  // PDF table row order: totalUnits, blockedUnits, freeUnits, NAV, amount, inTransition, totalValue
-  if (nums.length < 4) return null
+  // Table columns: totalUnits, blockedUnits(0), freeUnits, NAV, amount, inTransition(0), totalValue
+  // After filtering zeros: totalUnits, freeUnits, NAV, amount, totalValue
+  if (nums.length < 3) return null
 
-  const units = nums[0]
-  const nav   = nums[3] ?? nums[2]
-  const value = nums[6] ?? nums[4] ?? nums[nums.length - 1]
+  const units = nums[0]                          // Total Units
+  const nav   = nums[2]                          // NAV (3rd after zeros removed)
+  const value = nums[4] ?? nums[nums.length - 1] // Total Value of Scheme (last column)
 
   return { key, label: LABELS[key], units, nav, value }
 }
