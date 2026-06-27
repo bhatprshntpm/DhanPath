@@ -12,9 +12,6 @@ import DataManagement from './components/DataManagement'
 import HealthScoreCard from './components/HealthScoreCard'
 import MonthlyReportCard from './components/MonthlyReportCard'
 import DebtCard from './components/DebtCard'
-import CrorepatiCalc from './components/CrorepatiCalc'
-import ChaiMoney from './components/ChaiMoney'
-import BadgesCard from './components/BadgesCard'
 import { ONBOARD_KEY, isDemoMode } from './lib/demoData'
 import { DEFAULT_DATA } from './lib/storage'
 
@@ -68,15 +65,6 @@ function AppContent() {
 
         {/* Financial Arc — history + projection + what-if */}
         <FinancialArc />
-
-        {/* Crorepati calculator */}
-        <CrorepatiCalc />
-
-        {/* Chai Money insights */}
-        <ChaiMoney />
-
-        {/* Achievements */}
-        <BadgesCard />
 
         {/* Data sources */}
         <DataManagement />
