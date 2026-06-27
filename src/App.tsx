@@ -9,6 +9,12 @@ import AssetAllocationCard from './components/AssetAllocationCard'
 import FinancialArc from './components/FinancialArc'
 import GoalsCard from './components/GoalsCard'
 import DataManagement from './components/DataManagement'
+import HealthScoreCard from './components/HealthScoreCard'
+import MonthlyReportCard from './components/MonthlyReportCard'
+import DebtCard from './components/DebtCard'
+import CrorepatiCalc from './components/CrorepatiCalc'
+import ChaiMoney from './components/ChaiMoney'
+import BadgesCard from './components/BadgesCard'
 import { ONBOARD_KEY, isDemoMode } from './lib/demoData'
 import { DEFAULT_DATA } from './lib/storage'
 
@@ -48,11 +54,29 @@ function AppContent() {
           <CashFlowOverview />
         </div>
 
+        {/* Financial health | Monthly summary */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <HealthScoreCard />
+          <MonthlyReportCard />
+        </div>
+
         {/* Goals */}
         <GoalsCard />
 
+        {/* Debt tracker */}
+        <DebtCard />
+
         {/* Financial Arc — history + projection + what-if */}
         <FinancialArc />
+
+        {/* Crorepati calculator */}
+        <CrorepatiCalc />
+
+        {/* Chai Money insights */}
+        <ChaiMoney />
+
+        {/* Achievements */}
+        <BadgesCard />
 
         {/* Data sources */}
         <DataManagement />
