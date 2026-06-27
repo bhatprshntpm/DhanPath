@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react'
 import {
   ChevronDown, ChevronRight, Upload, CheckCircle, Loader2, X,
-  RefreshCw, RotateCcw, TrendingUp, Landmark, Coins, DollarSign, Wallet, Building2,
+  RefreshCw, RotateCcw, TrendingUp, Landmark, Coins, DollarSign, Wallet, Building2, Banknote,
 } from 'lucide-react'
 import ImportCard from './ImportCard'
 import DebtCard from './DebtCard'
@@ -15,6 +15,8 @@ import { parseEPFPDF, epfToSnapshot, epfToTransactions, epfToHolding, epfToMonth
 import type { EPFParseResult } from '../lib/epfParser'
 import { parseNPSPDF, npsToHoldings } from '../lib/npsParser'
 import type { NPSParseResult } from '../lib/npsParser'
+import { parseIndianBankPDF, bankToHolding, bankToSnapshot } from '../lib/indianBankParser'
+import type { BankParseResult } from '../lib/indianBankParser'
 import { useApp } from '../context/AppContext'
 import { DEFAULT_DATA } from '../lib/storage'
 import { fmtINR } from '../lib/calc'
@@ -547,6 +549,171 @@ function RetirementContent() {
 }
 
 
+// ─── Bank Statements ─────────────────────────────────────────────────────────
+
+const BANK_LIST = [
+  { id: 'HDFC',             label: 'HDFC Bank',             types: 'Savings · FD' },
+  { id: 'SBI',              label: 'State Bank of India',   types: 'Savings · FD' },
+  { id: 'Kotak',            label: 'Kotak Bank',            types: 'Savings · FD' },
+  { id: 'Axis',             label: 'Axis Bank',             types: 'Savings · FD' },
+  { id: 'ICICI',            label: 'ICICI Bank',            types: 'Savings · FD' },
+  { id: 'Canara',           label: 'Canara Bank',           types: 'Savings · FD · PPF' },
+  { id: 'StandardChartered',label: 'Standard Chartered',    types: 'Savings · FD' },
+  { id: 'MahindraFinance',  label: 'Mahindra Finance',      types: 'FD' },
+]
+
+function BankStatementContent() {
+  const { data, upsertHoldings, addOrUpdateSnapshot, deleteHolding } = useApp()
+  const bankSavings = data.holdings.filter(h => h.subType === 'Savings')
+
+  const [parsing,  setParsing]  = useState(false)
+  const [result,   setResult]   = useState<BankParseResult | null>(null)
+  const [imported, setImported] = useState(false)
+  const [password, setPassword] = useState('')
+  const [manualBank, setManualBank] = useState('')
+  const [manualBal,  setManualBal]  = useState('')
+  const [manualSaved, setManualSaved] = useState(false)
+
+  async function handleFile(f: File) {
+    setParsing(true); setResult(null); setImported(false)
+    try { setResult(await parseIndianBankPDF(f, password || undefined)) }
+    catch (e: any) { setResult({ status: 'parse_error', message: String(e?.message ?? 'Failed'), bank: 'Unknown', bankLabel: 'Bank', accountType: 'savings', accountNumber: '', holderName: '', balance: 0, transactions: [] }) }
+    setParsing(false)
+  }
+
+  function doImport() {
+    if (!result || result.status !== 'success') return
+    upsertHoldings([bankToHolding(result)])
+    addOrUpdateSnapshot(bankToSnapshot(result))
+    setImported(true)
+  }
+
+  function saveManual() {
+    if (!manualBank || !manualBal) return
+    upsertHoldings([{
+      name: `Savings — ${manualBank}`, ticker: `SAV-${manualBank.toUpperCase().replace(/\s/g,'')}`,
+      type: 'cash', assetClass: 'Cash & Savings', subType: 'Savings',
+      qty: 1, lastPrice: parseFloat(manualBal), value: parseFloat(manualBal), costBasis: parseFloat(manualBal),
+    }])
+    setManualSaved(true)
+    setTimeout(() => { setManualSaved(false); setManualBank(''); setManualBal('') }, 2000)
+  }
+
+  const typeLabel = result?.accountType === 'fd' ? 'Fixed Deposit' : result?.accountType === 'ppf' ? 'PPF' : 'Savings'
+  const showFallback = result?.status === 'no_data' || result?.status === 'parse_error'
+
+  return (
+    <div className="flex flex-col gap-4">
+
+      {/* Supported banks */}
+      <div className="grid grid-cols-2 gap-1.5">
+        {BANK_LIST.map(b => (
+          <div key={b.id} className="flex items-center justify-between px-2.5 py-1.5 bg-surface-50 rounded-lg border border-surface-100">
+            <span className="text-xs font-medium text-surface-700">{b.label}</span>
+            <span className="text-[10px] text-surface-400">{b.types}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Existing savings */}
+      {bankSavings.length > 0 && (
+        <div className="flex flex-col gap-1.5 p-3 bg-surface-50 rounded-xl border border-surface-100">
+          <p className="text-xs font-semibold text-surface-600 mb-0.5">Saved accounts</p>
+          {bankSavings.map(h => (
+            <div key={h.id} className="flex items-center justify-between">
+              <span className="text-xs text-surface-700">{h.name} · <span className="font-mono">{fmtINR(h.value)}</span></span>
+              <button onClick={() => deleteHolding(h.id)} className="text-[10px] text-surface-300 hover:text-rose-400 px-1.5 py-0.5 rounded border border-transparent hover:border-rose-200 transition-colors">Remove</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Upload */}
+      {!result && !parsing && (
+        <div className="flex flex-col gap-2">
+          <DropZone accept=".pdf" color="green" onFile={handleFile} label="Drop your bank statement PDF here" />
+          <input className="input-field text-sm" placeholder="PDF password (if protected)" value={password} onChange={e => setPassword(e.target.value)} />
+          <p className="text-[10px] text-surface-400 px-1">Auto-detects bank and account type (savings / FD / PPF). Works with HDFC, SBI, Kotak, Axis, ICICI, Canara, Standard Chartered, Mahindra Finance.</p>
+        </div>
+      )}
+
+      {parsing && <div className="flex items-center justify-center gap-3 py-10"><Loader2 size={18} className="animate-spin text-green-500" /><span className="text-sm text-surface-600">Reading statement…</span></div>}
+
+      {result?.status === 'password_required' && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex flex-col gap-2">
+          <p className="text-xs font-semibold text-amber-700">Password required</p>
+          <input className="input-field text-sm" placeholder="Enter password" value={password} onChange={e => setPassword(e.target.value)} />
+          <button onClick={() => setResult(null)} className="btn-primary text-xs">Re-upload with password</button>
+        </div>
+      )}
+
+      {showFallback && (
+        <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 flex flex-col gap-2">
+          <p className="text-xs font-semibold text-rose-700">Could not parse automatically</p>
+          <p className="text-xs text-rose-600">{result?.message}</p>
+          <button onClick={() => setResult(null)} className="text-xs text-rose-600 underline">Try a different file</button>
+        </div>
+      )}
+
+      {result?.status === 'success' && !imported && (
+        <div className="flex flex-col gap-3">
+          <div className="bg-green-50 border border-green-100 rounded-xl p-4 flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-surface-800">{result.bankLabel}</p>
+                <p className="text-xs text-surface-500">{typeLabel}{result.accountNumber ? ` · ····${result.accountNumber.slice(-4)}` : ''}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-lg font-bold text-surface-900">{fmtINR(result.balance)}</p>
+                {result.accountType === 'fd' && result.principal && result.principal !== result.balance && (
+                  <p className="text-[10px] text-surface-400">Principal {fmtINR(result.principal)}</p>
+                )}
+              </div>
+            </div>
+            {result.accountType === 'fd' && (
+              <div className="flex gap-4 text-xs text-surface-500 border-t border-green-100 pt-2">
+                {result.interestRate ? <span>Rate: {result.interestRate}%</span> : null}
+                {result.maturityDate ? <span>Matures: {result.maturityDate}</span> : null}
+              </div>
+            )}
+            {result.holderName && <p className="text-xs text-surface-400">{result.holderName}</p>}
+          </div>
+          {result.accountType === 'fd' && (
+            <p className="text-[11px] text-surface-400 px-1">This FD will also appear in your Fixed Deposits section.</p>
+          )}
+          {result.accountType === 'ppf' && (
+            <p className="text-[11px] text-surface-400 px-1">This PPF will also appear in your PPF / NPS section.</p>
+          )}
+          <button onClick={doImport} className="btn-primary flex items-center justify-center gap-2">
+            <CheckCircle size={14} /> Save {typeLabel} data
+          </button>
+          <button onClick={() => setResult(null)} className="text-xs text-surface-400 hover:text-surface-600 text-center">Upload a different file</button>
+        </div>
+      )}
+
+      {imported && <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4 text-center text-sm text-emerald-700 font-medium flex items-center justify-center gap-2"><CheckCircle size={16} /> {typeLabel} balance saved</div>}
+
+      {/* Manual savings fallback */}
+      <div className="border-t border-surface-100 pt-4">
+        <p className="text-xs font-semibold text-surface-500 mb-3">{showFallback ? 'Enter savings balance manually instead' : 'Or add savings manually'}</p>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs font-semibold text-surface-400 uppercase tracking-widest block mb-1.5">Bank Name</label>
+            <input className="input-field" placeholder="e.g. HDFC Bank" value={manualBank} onChange={e => setManualBank(e.target.value)} />
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-surface-400 uppercase tracking-widest block mb-1.5">Balance (₹)</label>
+            <input className="input-field" type="number" placeholder="e.g. 150000" value={manualBal} onChange={e => setManualBal(e.target.value)} />
+          </div>
+        </div>
+        <button onClick={saveManual} disabled={!manualBank || !manualBal} className="btn-primary mt-3 w-full disabled:opacity-40 flex items-center justify-center gap-2">
+          {manualSaved ? <><CheckCircle size={14} /> Saved!</> : 'Save savings account manually'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ─── Fixed Deposits ───────────────────────────────────────────────────────────
 function FDContent() {
   const { data, addHolding, deleteHolding } = useApp()
@@ -733,6 +900,7 @@ export default function DataManagement() {
   const epfHoldings    = data.holdings.filter(h => h.subType === 'EPF')
   const ppfHoldings    = data.holdings.filter(h => ['PPF','NPS','VPF','Gratuity','Pension'].includes(h.subType ?? ''))
   const cryptoCount    = data.holdings.filter(h => h.type === 'crypto').length
+  const bankHoldings   = data.holdings.filter(h => h.subType === 'Savings')
   const fdHoldingsMain = data.holdings.filter(h => h.subType === 'Fixed Deposit')
 
   function handleResetAll() {
@@ -797,6 +965,15 @@ export default function DataManagement() {
             connected={cryptoCount > 0} statusLabel={cryptoCount > 0 ? `${cryptoCount} coin${cryptoCount > 1 ? 's' : ''}` : 'Not added — add manually'}
             onClear={cryptoCount > 0 ? () => replaceData({ ...data, holdings: data.holdings.filter(h => h.type !== 'crypto') }) : undefined}>
             <CryptoContent />
+          </SourceRow>
+
+          <SourceRow icon={<Banknote size={15} />} label="Bank Statements" color="green"
+            connected={bankHoldings.length > 0}
+            statusLabel={bankHoldings.length > 0
+              ? bankHoldings.map(h => `${h.name.split('—')[1]?.trim() ?? h.name} ${fmtINR(h.value)}`).join(' · ')
+              : 'Not imported — upload PDF statement'}
+            onClear={bankHoldings.length > 0 ? () => replaceData({ ...data, holdings: data.holdings.filter(h => h.subType !== 'Savings') }) : undefined}>
+            <BankStatementContent />
           </SourceRow>
 
           <SourceRow icon={<Building2 size={15} />} label="Fixed Deposits" color="teal"
