@@ -495,12 +495,16 @@ function NPSUploadSection() {
 }
 
 function RetirementContent() {
-  const { addHolding } = useApp()
+  const { data, addHolding, deleteHolding } = useApp()
   const [tab,       setTab]       = useState<'nps' | 'manual'>('nps')
   const [type,      setType]      = useState('PPF')
   const [balance,   setBalance]   = useState('')
   const [costBasis, setCostBasis] = useState('')
   const [saved,     setSaved]     = useState(false)
+
+  const nonNPS = data.holdings.filter(h =>
+    ['PPF','VPF','Gratuity','Pension'].includes(h.subType ?? '') || h.ticker?.startsWith('CANARA_PPF')
+  )
 
   function save() {
     if (!balance) return
@@ -511,6 +515,18 @@ function RetirementContent() {
 
   return (
     <div className="flex flex-col gap-4">
+
+      {nonNPS.length > 0 && (
+        <div className="flex flex-col gap-1.5 p-3 bg-surface-50 rounded-xl border border-surface-100">
+          <p className="text-xs font-semibold text-surface-600 mb-0.5">Saved</p>
+          {nonNPS.map(h => (
+            <div key={h.id} className="flex items-center justify-between">
+              <span className="text-xs text-surface-700">{h.name} · <span className="font-mono">{fmtINR(h.value)}</span></span>
+              <button onClick={() => deleteHolding(h.id)} className="text-[10px] text-surface-300 hover:text-rose-400 px-1.5 py-0.5 rounded border border-transparent hover:border-rose-200 transition-colors">Remove</button>
+            </div>
+          ))}
+        </div>
+      )}
       {/* Tab switcher */}
       <div className="flex bg-surface-100 rounded-lg p-0.5 gap-0.5 w-fit">
         {([['nps', 'NPS Statement (PDF)'], ['manual', 'Manual Entry']] as const).map(([k, l]) => (
