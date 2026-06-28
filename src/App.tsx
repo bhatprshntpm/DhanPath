@@ -3,16 +3,13 @@ import { AppProvider, useApp } from './context/AppContext'
 import Header from './components/Header'
 import OnboardingWizard from './components/OnboardingWizard'
 import DemoBanner from './components/DemoBanner'
-import HeroSection from './components/HeroSection'
-import CashFlowOverview from './components/CashFlowOverview'
-import AssetAllocationCard from './components/AssetAllocationCard'
+import VitalsBar from './components/VitalsBar'
 import FinancialArc from './components/FinancialArc'
 import GoalsCard from './components/GoalsCard'
-import DataManagement from './components/DataManagement'
-import HealthScoreCard from './components/HealthScoreCard'
-import MonthlyReportCard from './components/MonthlyReportCard'
+import CashFlowOverview from './components/CashFlowOverview'
+import AssetAllocationCard from './components/AssetAllocationCard'
 import DebtCard from './components/DebtCard'
-import PlanSummary from './components/PlanSummary'
+import DataManagement from './components/DataManagement'
 import { ONBOARD_KEY, isDemoMode } from './lib/demoData'
 import { DEFAULT_DATA } from './lib/storage'
 
@@ -41,34 +38,25 @@ function AppContent() {
       <Header onEditProfile={() => setWizardOpen(true)} />
       {demoMode && <DemoBanner onUseMyData={handleUseMyData} />}
 
-      <main className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-5 sm:py-8 flex flex-col gap-5 sm:gap-6">
+      <main className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-6 sm:py-10 flex flex-col gap-6 sm:gap-8">
 
-        {/* Net worth + key metrics */}
-        <HeroSection />
+        {/* Vitals — 3 numbers, no card border */}
+        <VitalsBar />
 
-        {/* Plan narrative */}
-        <PlanSummary />
+        {/* THE MAIN STORY — arc is hero */}
+        <FinancialArc />
 
-        {/* What you own | How money moved */}
+        {/* Goals — the "why" behind the arc */}
+        <GoalsCard />
+
+        {/* Supporting context */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           <AssetAllocationCard />
           <CashFlowOverview />
         </div>
 
-        {/* Financial health | Monthly summary */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          <HealthScoreCard />
-          <MonthlyReportCard />
-        </div>
-
-        {/* Goals */}
-        <GoalsCard />
-
-        {/* Debt tracker */}
+        {/* Debt */}
         <DebtCard />
-
-        {/* Financial Arc — history + projection + what-if */}
-        <FinancialArc />
 
         {/* Data sources */}
         <DataManagement />

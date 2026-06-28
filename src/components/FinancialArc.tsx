@@ -338,7 +338,7 @@ export default function FinancialArc() {
       </div>
 
       {/* Chart */}
-      <ResponsiveContainer width="100%" height={220}>
+      <ResponsiveContainer width="100%" height={300}>
         <ComposedChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
           <defs>
             <linearGradient id="gradAccumulation" x1="0" y1="0" x2="0" y2="1">
