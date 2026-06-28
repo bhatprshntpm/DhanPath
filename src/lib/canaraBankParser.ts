@@ -50,7 +50,7 @@ function parseAmount(s: string): number {
 
 async function extractPDFText(file: File): Promise<string> {
   const buf  = await file.arrayBuffer()
-  const task = pdfjsLib.getDocument({ data: new Uint8Array(buf), password: '' })
+  const task = pdfjsLib.getDocument({ data: new Uint8Array(buf), password: '', standardFontDataUrl: '/standard_fonts/' })
   const pdf  = await task.promise
   const pages: string[] = []
   for (let i = 1; i <= pdf.numPages; i++) {
@@ -316,6 +316,38 @@ function parseKotakBalancePDF(text: string, filename: string): CanaraParseResult
 
 
 
+// ── HDFC parsers ─────────────────────────────────────────────────────────────
+
+function parseHDFCBalancePDF(text: string, filename: string): CanaraParseResult {
+  const accMatch = text.match(/(\d{14})[\s\S]{1,80}?SAVING Account INR/i)
+  const balMatch = text.match(/\bINR\s*([\d,]+\.\d{2})\s*[\r\n]+Credit Balance/i)
+    ?? text.match(/INR\s+([\d,]+\.\d{2})\s+Credit Balance/i)
+
+  const accountNumber = accMatch?.[1] ?? 'HDFC'
+  const balance = balMatch ? extractNumber(balMatch[1]) : 0
+
+  if (balance === 0) return { status: 'error', message: 'Could not read balance from HDFC balance certificate', accounts: [] }
+  return {
+    status: 'success', message: 'HDFC savings parsed',
+    accounts: [{ accountNumber, accountType: 'savings', bank: 'HDFC Bank', bankCode: 'HDFC', balance, isActive: true, sourceFile: filename }],
+  }
+}
+
+function parseHDFCFDSummaryPDF(text: string, filename: string): CanaraParseResult {
+  const accounts: CanaraAccount[] = []
+  const rowRe = /\d+\s+(\d{11,14})\s+[\w\s,()]+?INR\s+([\d.]+)\s+([\d.]+)\s+(\d{1,2}\s+\w{3}[\s\n]+\d{4})/gi
+  let m: RegExpExecArray | null
+  while ((m = rowRe.exec(text)) !== null) {
+    const accountNumber  = m[1]
+    const balance        = parseFloat(m[2])
+    const maturityAmount = parseFloat(m[3])
+    const maturityDate   = parseDateDMY(m[4].replace(/[\s\n]+/g, ' '))
+    if (balance > 0) accounts.push({ accountNumber, accountType: 'fd', bank: 'HDFC Bank', bankCode: 'HDFC', balance, maturityDate, maturityAmount, isActive: true, sourceFile: filename })
+  }
+  if (accounts.length === 0) return { status: 'error', message: 'No FDs found in HDFC FD Summary', accounts: [] }
+  return { status: 'success', message: `${accounts.length} HDFC FDs parsed`, accounts }
+}
+
 export async function parseCanaraFile(file: File): Promise<CanaraParseResult> {
   const name = file.name.toLowerCase()
 
@@ -335,6 +367,12 @@ export async function parseCanaraFile(file: File): Promise<CanaraParseResult> {
       const text = await extractPDFText(file)
       if (/balance\s*certificate/i.test(text) && /CRN\s*:/i.test(text) && /(SAVING|TERM\s+DEPOSIT)\s+CR/i.test(text)) {
         return parseKotakBalancePDF(text, file.name)
+      }
+      if (/Balance confirmation certificate/i.test(text) && /SAVING Account INR/i.test(text)) {
+        return parseHDFCBalancePDF(text, file.name)
+      }
+      if (/Fixed Deposit Summary/i.test(text) && /HDFC/i.test(text)) {
+        return parseHDFCFDSummaryPDF(text, file.name)
       }
       if (/PPF\s*Statement/i.test(text)) {
         return parsePPFPDF(text, file.name)

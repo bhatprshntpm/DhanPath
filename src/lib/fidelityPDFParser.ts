@@ -28,7 +28,7 @@ export interface FidelityParseResult {
 // ─── PDF text extraction ──────────────────────────────────────────────────────
 async function extractLines(file: File): Promise<string[]> {
   const buf  = await file.arrayBuffer()
-  const task = pdfjsLib.getDocument({ data: new Uint8Array(buf) })
+  const task = pdfjsLib.getDocument({ data: new Uint8Array(buf), standardFontDataUrl: '/standard_fonts/' })
   const pdf  = await task.promise
   const allLines: string[] = []
 

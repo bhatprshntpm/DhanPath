@@ -650,7 +650,7 @@ interface BankConfig {
 const BANK_CONFIG: BankConfig[] = [
   { id: 'canara', label: 'Canara Bank',       parser: 'canara',  accepts: '.csv,.pdf', multiple: true,  hint: 'Drop savings CSV, FD receipt PDFs, or PPF PDF — all at once' },
   { id: 'kotak',  label: 'Kotak Bank',         parser: 'canara',  accepts: '.pdf',      multiple: false, hint: 'Balance Certificate PDF' },
-  { id: 'hdfc',   label: 'HDFC Bank',          parser: 'manual',  accepts: '.pdf',      multiple: false, hint: 'Enter manually', notice: 'HDFC PDFs use a font encoding that browsers can\'t decode. Enter your savings balance below — add FDs via the Fixed Deposits section.' },
+  { id: 'hdfc',   label: 'HDFC Bank',          parser: 'canara',  accepts: '.pdf',      multiple: true,  hint: 'Balance Certificate PDF · FD Summary PDF — drop one or both' },
   { id: 'sbi',    label: 'SBI',                parser: 'generic', accepts: '.pdf',      multiple: false, hint: 'Account statement PDF' },
   { id: 'axis',   label: 'Axis Bank',          parser: 'generic', accepts: '.pdf',      multiple: false, hint: 'Account statement PDF' },
   { id: 'icici',  label: 'ICICI Bank',         parser: 'generic', accepts: '.pdf',      multiple: false, hint: 'Account statement PDF' },

@@ -31,7 +31,7 @@ function parseIndianNumber(s: string): number {
 
 async function extractText(file: File): Promise<string> {
   const buf  = await file.arrayBuffer()
-  const task = pdfjsLib.getDocument({ data: new Uint8Array(buf) })
+  const task = pdfjsLib.getDocument({ data: new Uint8Array(buf), standardFontDataUrl: '/standard_fonts/' })
   const pdf  = await task.promise
   const pages: string[] = []
   for (let i = 1; i <= pdf.numPages; i++) {

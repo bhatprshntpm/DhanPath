@@ -41,7 +41,7 @@ export interface BankParseResult {
 
 async function extractText(file: File, password?: string): Promise<string> {
   const buf  = await file.arrayBuffer()
-  const task = pdfjsLib.getDocument({ data: new Uint8Array(buf), password: password ?? '' })
+  const task = pdfjsLib.getDocument({ data: new Uint8Array(buf), password: password ?? '', standardFontDataUrl: '/standard_fonts/' })
   const pdf  = await task.promise
   const pages: string[] = []
   for (let i = 1; i <= pdf.numPages; i++) {

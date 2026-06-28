@@ -64,7 +64,7 @@ function parseDate(s: string): string {
 
 async function extractLines(file: File, password?: string): Promise<string[]> {
   const buf  = await file.arrayBuffer()
-  const task = pdfjsLib.getDocument({ data: new Uint8Array(buf), password: password ?? '' })
+  const task = pdfjsLib.getDocument({ data: new Uint8Array(buf), password: password ?? '', standardFontDataUrl: '/standard_fonts/' })
   const pdf  = await task.promise
   const allLines: string[] = []
 
