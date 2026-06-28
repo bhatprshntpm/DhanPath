@@ -19,6 +19,7 @@ import { parseIndianBankPDF, bankToHolding, bankToSnapshot } from '../lib/indian
 import type { BankParseResult } from '../lib/indianBankParser'
 import { parseCanaraFile, canaraAccountToHolding } from '../lib/canaraBankParser'
 import type { CanaraParseResult } from '../lib/canaraBankParser'
+import type { Holding } from '../types'
 import { useApp } from '../context/AppContext'
 import { DEFAULT_DATA } from '../lib/storage'
 import { fmtINR } from '../lib/calc'
@@ -551,77 +552,122 @@ function RetirementContent() {
 }
 
 
-// ─── Bank Statements ─────────────────────────────────────────────────────────
+// ─── Bank Accounts (unified — any bank, any file type) ───────────────────────
 
-const BANK_LIST = [
-  { id: 'HDFC',             label: 'HDFC Bank',             types: 'Savings · FD' },
-  { id: 'SBI',              label: 'State Bank of India',   types: 'Savings · FD' },
-  { id: 'Kotak',            label: 'Kotak Bank',            types: 'Savings · FD' },
-  { id: 'Axis',             label: 'Axis Bank',             types: 'Savings · FD' },
-  { id: 'ICICI',            label: 'ICICI Bank',            types: 'Savings · FD' },
-  { id: 'Canara',           label: 'Canara Bank',           types: 'Savings · FD · PPF' },
-  { id: 'StandardChartered',label: 'Standard Chartered',    types: 'Savings · FD' },
-  { id: 'MahindraFinance',  label: 'Mahindra Finance',      types: 'FD' },
-]
+interface BankItem {
+  key:           string
+  bank:          string
+  typeLabel:     string
+  typeColor:     string
+  accountSuffix: string
+  balance:       number
+  maturityDate?: string
+  holding:       Omit<Holding, 'id'>
+  snapshot?:     any
+}
+
+function canaraToItems(r: CanaraParseResult): BankItem[] {
+  return r.accounts.map(acc => ({
+    key:           `CANARA_${acc.accountNumber}`,
+    bank:          'Canara Bank',
+    typeLabel:     acc.accountType === 'savings' ? 'Savings' : acc.accountType === 'fd' ? 'Fixed Deposit' : 'PPF',
+    typeColor:     acc.accountType === 'savings' ? 'text-emerald-700' : acc.accountType === 'fd' ? 'text-blue-700' : 'text-indigo-700',
+    accountSuffix: acc.accountNumber.slice(-4),
+    balance:       acc.balance,
+    maturityDate:  acc.maturityDate,
+    holding:       canaraAccountToHolding(acc),
+  }))
+}
+
+function genericToItem(r: BankParseResult): BankItem {
+  return {
+    key:           `BANK_${r.bank}_${r.accountNumber}`,
+    bank:          r.bankLabel || r.bank,
+    typeLabel:     r.accountType === 'fd' ? 'Fixed Deposit' : r.accountType === 'ppf' ? 'PPF' : 'Savings',
+    typeColor:     r.accountType === 'fd' ? 'text-blue-700' : r.accountType === 'ppf' ? 'text-indigo-700' : 'text-emerald-700',
+    accountSuffix: (r.accountNumber || '').slice(-4) || '—',
+    balance:       r.balance,
+    maturityDate:  r.maturityDate ? String(r.maturityDate) : undefined,
+    holding:       bankToHolding(r),
+    snapshot:      bankToSnapshot(r),
+  }
+}
 
 function BankStatementContent() {
   const { data, upsertHoldings, addOrUpdateSnapshot, deleteHolding } = useApp()
-  const bankSavings = data.holdings.filter(h => h.subType === 'Savings')
-
-  const [parsing,  setParsing]  = useState(false)
-  const [result,   setResult]   = useState<BankParseResult | null>(null)
-  const [imported, setImported] = useState(false)
-  const [password, setPassword] = useState('')
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [parsing,    setParsing]    = useState(false)
+  const [items,      setItems]      = useState<BankItem[]>([])
+  const [errs,       setErrs]       = useState<string[]>([])
+  const [imported,   setImported]   = useState(false)
+  const [password,   setPassword]   = useState('')
   const [manualBank, setManualBank] = useState('')
   const [manualBal,  setManualBal]  = useState('')
-  const [manualSaved, setManualSaved] = useState(false)
+  const [manualSaved,setManualSaved]= useState(false)
 
-  async function handleFile(f: File) {
-    setParsing(true); setResult(null); setImported(false)
-    try { setResult(await parseIndianBankPDF(f, password || undefined)) }
-    catch (e: any) { setResult({ status: 'parse_error', message: String(e?.message ?? 'Failed'), bank: 'Unknown', bankLabel: 'Bank', accountType: 'savings', accountNumber: '', holderName: '', balance: 0, transactions: [] }) }
-    setParsing(false)
+  const bankHoldings = data.holdings.filter(h => h.subType === 'Savings' || h.ticker?.startsWith('CANARA_'))
+
+  async function handleFiles(fileList: FileList | File[]) {
+    setParsing(true); setItems([]); setErrs([]); setImported(false)
+    const newItems: BankItem[] = []
+    const newErrs:  string[]   = []
+    await Promise.all(Array.from(fileList).map(async f => {
+      try {
+        if (f.name.toLowerCase().endsWith('.csv')) {
+          const r = await parseCanaraFile(f)
+          if (r.status === 'success') newItems.push(...canaraToItems(r))
+          else if (r.status === 'error') newErrs.push(`${f.name}: ${r.message}`)
+        } else {
+          const cr = await parseCanaraFile(f)
+          if (cr.status === 'success') {
+            newItems.push(...canaraToItems(cr))
+          } else {
+            const gr = await parseIndianBankPDF(f, password || undefined)
+            if (gr.status === 'success') newItems.push(genericToItem(gr))
+            else if (gr.status === 'password_required') newErrs.push(`${f.name}: Password required — enter it below and retry`)
+            else if (gr.status !== 'no_data') newErrs.push(`${f.name}: ${gr.message}`)
+          }
+        }
+      } catch (e: any) { newErrs.push(`${f.name}: ${e?.message ?? 'Parse failed'}`) }
+    }))
+    setItems(newItems); setErrs(newErrs); setParsing(false)
   }
 
   function doImport() {
-    if (!result || result.status !== 'success') return
-    upsertHoldings([bankToHolding(result)])
-    addOrUpdateSnapshot(bankToSnapshot(result))
+    upsertHoldings(items.map(i => i.holding))
+    items.forEach(i => { if (i.snapshot) addOrUpdateSnapshot(i.snapshot) })
+    const sv = items.filter(i => i.typeLabel === 'Savings').reduce((s, i) => s + i.balance, 0)
+    const fd = items.filter(i => i.typeLabel === 'Fixed Deposit').reduce((s, i) => s + i.balance, 0)
+    const pp = items.filter(i => i.typeLabel === 'PPF').reduce((s, i) => s + i.balance, 0)
+    if (sv + fd + pp > 0) {
+      const bd: Record<string, number> = {}
+      if (sv) bd['Cash & Savings'] = sv
+      if (fd) bd['Debt'] = (bd['Debt'] ?? 0) + fd
+      if (pp) bd['EPF / NPS / PPF'] = (bd['EPF / NPS / PPF'] ?? 0) + pp
+      addOrUpdateSnapshot({
+        date: new Date().toISOString().slice(0, 7),
+        assets: { checking: 0, savings: sv, brokerage: 0, retirement: pp, realEstate: 0, other: 0 },
+        liabilities: { mortgage: 0, studentLoans: 0, creditCards: 0, autoLoans: 0, other: 0 },
+        breakdown: bd,
+      })
+    }
     setImported(true)
   }
 
   function saveManual() {
     if (!manualBank || !manualBal) return
-    upsertHoldings([{
-      name: `Savings — ${manualBank}`, ticker: `SAV-${manualBank.toUpperCase().replace(/\s/g,'')}`,
-      type: 'cash', assetClass: 'Cash & Savings', subType: 'Savings',
-      qty: 1, lastPrice: parseFloat(manualBal), value: parseFloat(manualBal), costBasis: parseFloat(manualBal),
-    }])
+    upsertHoldings([{ name: `Savings — ${manualBank}`, ticker: `SAV-${manualBank.toUpperCase().replace(/\s/g,'')}`, type: 'cash', assetClass: 'Cash & Savings', subType: 'Savings', qty: 1, lastPrice: parseFloat(manualBal), value: parseFloat(manualBal), costBasis: parseFloat(manualBal) }])
     setManualSaved(true)
     setTimeout(() => { setManualSaved(false); setManualBank(''); setManualBal('') }, 2000)
   }
 
-  const typeLabel = result?.accountType === 'fd' ? 'Fixed Deposit' : result?.accountType === 'ppf' ? 'PPF' : 'Savings'
-  const showFallback = result?.status === 'no_data' || result?.status === 'parse_error'
-
   return (
     <div className="flex flex-col gap-4">
 
-      {/* Supported banks */}
-      <div className="grid grid-cols-2 gap-1.5">
-        {BANK_LIST.map(b => (
-          <div key={b.id} className="flex items-center justify-between px-2.5 py-1.5 bg-surface-50 rounded-lg border border-surface-100">
-            <span className="text-xs font-medium text-surface-700">{b.label}</span>
-            <span className="text-[10px] text-surface-400">{b.types}</span>
-          </div>
-        ))}
-      </div>
-
-      {/* Existing savings */}
-      {bankSavings.length > 0 && (
+      {bankHoldings.length > 0 && !items.length && (
         <div className="flex flex-col gap-1.5 p-3 bg-surface-50 rounded-xl border border-surface-100">
           <p className="text-xs font-semibold text-surface-600 mb-0.5">Saved accounts</p>
-          {bankSavings.map(h => (
+          {bankHoldings.map(h => (
             <div key={h.id} className="flex items-center justify-between">
               <span className="text-xs text-surface-700">{h.name} · <span className="font-mono">{fmtINR(h.value)}</span></span>
               <button onClick={() => deleteHolding(h.id)} className="text-[10px] text-surface-300 hover:text-rose-400 px-1.5 py-0.5 rounded border border-transparent hover:border-rose-200 transition-colors">Remove</button>
@@ -630,74 +676,82 @@ function BankStatementContent() {
         </div>
       )}
 
-      {/* Upload */}
-      {!result && !parsing && (
+      {!items.length && !parsing && (
         <div className="flex flex-col gap-2">
-          <DropZone accept=".pdf" color="green" onFile={handleFile} label="Drop your bank statement PDF here" />
-          <input className="input-field text-sm" placeholder="PDF password (if protected)" value={password} onChange={e => setPassword(e.target.value)} />
-          <p className="text-[10px] text-surface-400 px-1">Auto-detects bank and account type (savings / FD / PPF). Works with HDFC, SBI, Kotak, Axis, ICICI, Canara, Standard Chartered, Mahindra Finance.</p>
-        </div>
-      )}
-
-      {parsing && <div className="flex items-center justify-center gap-3 py-10"><Loader2 size={18} className="animate-spin text-green-500" /><span className="text-sm text-surface-600">Reading statement…</span></div>}
-
-      {result?.status === 'password_required' && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex flex-col gap-2">
-          <p className="text-xs font-semibold text-amber-700">Password required</p>
-          <input className="input-field text-sm" placeholder="Enter password" value={password} onChange={e => setPassword(e.target.value)} />
-          <button onClick={() => setResult(null)} className="btn-primary text-xs">Re-upload with password</button>
-        </div>
-      )}
-
-      {showFallback && (
-        <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 flex flex-col gap-2">
-          <p className="text-xs font-semibold text-rose-700">Could not parse automatically</p>
-          <p className="text-xs text-rose-600">{result?.message}</p>
-          <button onClick={() => setResult(null)} className="text-xs text-rose-600 underline">Try a different file</button>
-        </div>
-      )}
-
-      {result?.status === 'success' && !imported && (
-        <div className="flex flex-col gap-3">
-          <div className="bg-green-50 border border-green-100 rounded-xl p-4 flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-semibold text-surface-800">{result.bankLabel}</p>
-                <p className="text-xs text-surface-500">{typeLabel}{result.accountNumber ? ` · ····${result.accountNumber.slice(-4)}` : ''}</p>
-              </div>
-              <div className="text-right">
-                <p className="text-lg font-bold text-surface-900">{fmtINR(result.balance)}</p>
-                {result.accountType === 'fd' && result.principal && result.principal !== result.balance && (
-                  <p className="text-[10px] text-surface-400">Principal {fmtINR(result.principal)}</p>
-                )}
-              </div>
+          <div
+            className="border-2 border-dashed border-surface-200 hover:border-green-400 hover:bg-green-50/20 rounded-2xl p-6 flex flex-col items-center gap-3 cursor-pointer transition-all"
+            onClick={() => fileRef.current?.click()}
+            onDragOver={e => e.preventDefault()}
+            onDrop={e => { e.preventDefault(); if (e.dataTransfer.files.length) handleFiles(e.dataTransfer.files) }}>
+            <Upload size={22} className="text-surface-300" />
+            <div className="text-center">
+              <p className="text-sm font-semibold text-surface-700">Drop bank statements here</p>
+              <p className="text-xs text-surface-400 mt-0.5">PDF or CSV · multiple files at once · any bank</p>
             </div>
-            {result.accountType === 'fd' && (
-              <div className="flex gap-4 text-xs text-surface-500 border-t border-green-100 pt-2">
-                {result.interestRate ? <span>Rate: {result.interestRate}%</span> : null}
-                {result.maturityDate ? <span>Matures: {result.maturityDate}</span> : null}
-              </div>
-            )}
-            {result.holderName && <p className="text-xs text-surface-400">{result.holderName}</p>}
+            <input ref={fileRef} type="file" accept=".pdf,.csv" multiple className="hidden"
+              onChange={e => { if (e.target.files?.length) handleFiles(e.target.files); e.target.value = '' }} />
           </div>
-          {result.accountType === 'fd' && (
-            <p className="text-[11px] text-surface-400 px-1">This FD will also appear in your Fixed Deposits section.</p>
-          )}
-          {result.accountType === 'ppf' && (
-            <p className="text-[11px] text-surface-400 px-1">This PPF will also appear in your PPF / NPS section.</p>
-          )}
-          <button onClick={doImport} className="btn-primary flex items-center justify-center gap-2">
-            <CheckCircle size={14} /> Save {typeLabel} data
-          </button>
-          <button onClick={() => setResult(null)} className="text-xs text-surface-400 hover:text-surface-600 text-center">Upload a different file</button>
+          <input className="input-field text-sm" placeholder="PDF password (if protected — leave blank if none)" value={password} onChange={e => setPassword(e.target.value)} />
+          <p className="text-[10px] text-surface-400 px-1">Canara (savings CSV · FD receipt PDF · PPF PDF) · HDFC · SBI · Kotak · Axis · ICICI · Standard Chartered · Mahindra Finance</p>
         </div>
       )}
 
-      {imported && <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4 text-center text-sm text-emerald-700 font-medium flex items-center justify-center gap-2"><CheckCircle size={16} /> {typeLabel} balance saved</div>}
+      {parsing && <div className="flex items-center justify-center gap-3 py-10"><Loader2 size={18} className="animate-spin text-green-500" /><span className="text-sm text-surface-600">Parsing files…</span></div>}
 
-      {/* Manual savings fallback */}
+      {!parsing && items.length > 0 && (
+        <div className="flex flex-col gap-3">
+          <p className="text-[10px] uppercase tracking-widest font-semibold text-surface-400">
+            Preview — {items.length} account{items.length !== 1 ? 's' : ''} found
+          </p>
+          <div className="rounded-xl overflow-hidden border border-surface-100">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="bg-surface-50 text-surface-400">
+                  <th className="text-left px-3 py-2">Bank</th>
+                  <th className="text-left px-3 py-2">Type</th>
+                  <th className="text-right px-3 py-2">Balance</th>
+                  <th className="text-right px-3 py-2">Matures</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-surface-50">
+                {items.map(item => (
+                  <tr key={item.key}>
+                    <td className="px-3 py-2.5 font-medium text-surface-700">{item.bank} <span className="text-surface-400 font-mono font-normal">····{item.accountSuffix}</span></td>
+                    <td className={`px-3 py-2.5 font-semibold ${item.typeColor}`}>{item.typeLabel}</td>
+                    <td className="px-3 py-2.5 text-right font-mono font-semibold">{fmtINR(item.balance)}</td>
+                    <td className="px-3 py-2.5 text-right text-surface-400">
+                      {item.maturityDate ? new Date(item.maturityDate).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }) : '—'}
+                    </td>
+                  </tr>
+                ))}
+                <tr className="bg-surface-50 font-semibold">
+                  <td colSpan={2} className="px-3 py-2 text-surface-600">Total</td>
+                  <td className="px-3 py-2 text-right font-mono">{fmtINR(items.reduce((s, i) => s + i.balance, 0))}</td>
+                  <td />
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          {errs.map((e, i) => <p key={i} className="text-[11px] text-rose-500">⚠ {e}</p>)}
+          {imported
+            ? <div className="flex items-center gap-2 text-xs font-semibold text-emerald-700 bg-emerald-50 px-3 py-2.5 rounded-xl"><CheckCircle size={13} /> Imported successfully</div>
+            : <div className="flex gap-3">
+                <button onClick={() => { setItems([]); setErrs([]) }} className="btn-ghost text-xs flex items-center gap-1.5"><RefreshCw size={12} /> Different files</button>
+                <button onClick={doImport} className="btn-primary flex-1 flex items-center justify-center gap-2"><CheckCircle size={14} /> Import {items.length} account{items.length !== 1 ? 's' : ''}</button>
+              </div>
+          }
+        </div>
+      )}
+
+      {!parsing && errs.length > 0 && items.length === 0 && (
+        <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 flex flex-col gap-1">
+          {errs.map((e, i) => <p key={i} className="text-xs text-rose-600">⚠ {e}</p>)}
+          <button onClick={() => setErrs([])} className="text-xs text-rose-600 underline mt-1">Try again</button>
+        </div>
+      )}
+
       <div className="border-t border-surface-100 pt-4">
-        <p className="text-xs font-semibold text-surface-500 mb-3">{showFallback ? 'Enter savings balance manually instead' : 'Or add savings manually'}</p>
+        <p className="text-xs font-semibold text-surface-500 mb-3">Or add savings manually</p>
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="text-xs font-semibold text-surface-400 uppercase tracking-widest block mb-1.5">Bank Name</label>
@@ -717,125 +771,6 @@ function BankStatementContent() {
 }
 
 // ─── Fixed Deposits ───────────────────────────────────────────────────────────
-// ─── Canara Bank ─────────────────────────────────────────────────────────────
-function CanaraContent() {
-  const { data, upsertHoldings, addOrUpdateSnapshot } = useApp()
-  const fileRef = useRef<HTMLInputElement>(null)
-  const [results, setResults] = useState<CanaraParseResult[]>([])
-  const [loading, setLoading] = useState(false)
-  const [imported, setImported] = useState(false)
-  const allAccounts = results.flatMap(r => r.accounts)
-  const errors = results.filter(r => r.status === 'error')
-
-  async function handleFiles(files: FileList | File[]) {
-    setLoading(true); setImported(false)
-    const parsed = await Promise.all(Array.from(files).map(f => parseCanaraFile(f)))
-    setResults(parsed); setLoading(false)
-  }
-
-  function handleImport() {
-    if (!allAccounts.length) return
-    upsertHoldings(allAccounts.map(canaraAccountToHolding))
-    const sv = allAccounts.filter(a => a.accountType === 'savings').reduce((s, a) => s + a.balance, 0)
-    const fd = allAccounts.filter(a => a.accountType === 'fd').reduce((s, a) => s + a.balance, 0)
-    const pp = allAccounts.filter(a => a.accountType === 'ppf').reduce((s, a) => s + a.balance, 0)
-    const bd: Record<string, number> = {}
-    if (sv) bd['Cash & Savings'] = sv
-    if (fd) bd['Debt'] = (bd['Debt'] ?? 0) + fd
-    if (pp) bd['EPF / NPS / PPF'] = (bd['EPF / NPS / PPF'] ?? 0) + pp
-    addOrUpdateSnapshot({
-      date: new Date().toISOString().slice(0, 7),
-      assets: { checking: 0, savings: sv, brokerage: 0, retirement: pp, realEstate: 0, other: 0 },
-      liabilities: { mortgage: 0, studentLoans: 0, creditCards: 0, autoLoans: 0, other: 0 },
-      breakdown: bd,
-    })
-    setImported(true)
-  }
-
-  const ch = data.holdings.filter(h => h.ticker?.startsWith('CANARA_'))
-  const TL: Record<string, string> = { savings: 'Savings A/C', fd: 'Fixed Deposit', ppf: 'PPF' }
-  const TC: Record<string, string> = { savings: 'text-emerald-700', fd: 'text-blue-700', ppf: 'text-indigo-700' }
-
-  return (
-    <div className="flex flex-col gap-4 p-4 pt-2">
-      {ch.length > 0 && (
-        <div className="flex flex-col gap-1.5">
-          {ch.map(h => (
-            <div key={h.id} className="flex justify-between text-xs py-1.5 px-3 bg-surface-50 rounded-lg">
-              <span className="font-medium text-surface-700">{h.name}</span>
-              <span className="font-mono">{fmtINR(h.value)}</span>
-            </div>
-          ))}
-        </div>
-      )}
-      <div
-        className="border-2 border-dashed border-surface-200 hover:border-emerald-400 hover:bg-emerald-50/20 rounded-2xl p-6 flex flex-col items-center gap-3 cursor-pointer transition-all"
-        onClick={() => fileRef.current?.click()}
-        onDragOver={e => e.preventDefault()}
-        onDrop={e => { e.preventDefault(); if (e.dataTransfer.files.length) handleFiles(e.dataTransfer.files) }}>
-        <Upload size={22} className="text-surface-300" />
-        <div className="text-center">
-          <p className="text-sm font-semibold text-surface-700">Drop Canara Bank files here</p>
-          <p className="text-xs text-surface-400 mt-0.5">Savings CSV · FD receipt PDFs · PPF PDF — all at once</p>
-        </div>
-        <input ref={fileRef} type="file" accept=".csv,.pdf" multiple className="hidden"
-          onChange={e => { if (e.target.files?.length) handleFiles(e.target.files); e.target.value = '' }} />
-      </div>
-      {loading && (
-        <div className="flex items-center gap-2 text-xs text-surface-500">
-          <Loader2 size={13} className="animate-spin" /> Parsing files…
-        </div>
-      )}
-      {!loading && allAccounts.length > 0 && (
-        <div className="flex flex-col gap-2">
-          <p className="text-[10px] uppercase tracking-widest font-semibold text-surface-400">
-            Preview — {allAccounts.length} account{allAccounts.length !== 1 ? 's' : ''} found
-          </p>
-          <div className="rounded-xl overflow-hidden border border-surface-100">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="bg-surface-50 text-surface-400">
-                  <th className="text-left px-3 py-2">Type</th>
-                  <th className="text-left px-3 py-2">Account</th>
-                  <th className="text-right px-3 py-2">Balance</th>
-                  <th className="text-right px-3 py-2">Matures</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-surface-50">
-                {allAccounts.map((acc, i) => (
-                  <tr key={i}>
-                    <td className={`px-3 py-2.5 font-semibold ${TC[acc.accountType]}`}>{TL[acc.accountType]}</td>
-                    <td className="px-3 py-2.5 font-mono text-surface-500">…{acc.accountNumber.slice(-6)}</td>
-                    <td className="px-3 py-2.5 text-right font-mono font-semibold">{fmtINR(acc.balance)}</td>
-                    <td className="px-3 py-2.5 text-right text-surface-400">
-                      {acc.maturityDate
-                        ? new Date(acc.maturityDate).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })
-                        : acc.accountType === 'ppf' ? 'PPF lock-in' : '—'}
-                    </td>
-                  </tr>
-                ))}
-                <tr className="bg-surface-50 font-semibold">
-                  <td colSpan={2} className="px-3 py-2 text-surface-600">Total</td>
-                  <td className="px-3 py-2 text-right font-mono">{fmtINR(allAccounts.reduce((s, a) => s + a.balance, 0))}</td>
-                  <td />
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          {errors.map((r, i) => <p key={i} className="text-[11px] text-rose-500">⚠ {r.message}</p>)}
-          {imported
-            ? <div className="flex items-center gap-2 text-xs font-semibold text-emerald-700 bg-emerald-50 px-3 py-2.5 rounded-xl"><CheckCircle size={13} /> Imported</div>
-            : <button onClick={handleImport} className="btn-primary flex items-center gap-2 justify-center text-sm py-2.5"><CheckCircle size={14} /> Import {allAccounts.length} account{allAccounts.length !== 1 ? 's' : ''}</button>
-          }
-        </div>
-      )}
-      {!loading && results.length > 0 && allAccounts.length === 0 && (
-        <p className="text-xs text-rose-500">{results.map(r => r.message).join(' · ')}</p>
-      )}
-    </div>
-  )
-}
-
 
 function FDContent() {
   const { data, addHolding, deleteHolding } = useApp()
@@ -1022,9 +957,8 @@ export default function DataManagement() {
   const epfHoldings    = data.holdings.filter(h => h.subType === 'EPF')
   const ppfHoldings    = data.holdings.filter(h => ['PPF','NPS','VPF','Gratuity','Pension'].includes(h.subType ?? ''))
   const cryptoCount    = data.holdings.filter(h => h.type === 'crypto').length
-  const bankHoldings   = data.holdings.filter(h => h.subType === 'Savings')
+  const bankHoldings   = data.holdings.filter(h => h.subType === 'Savings' || h.ticker?.startsWith('CANARA_'))
   const fdHoldingsMain = data.holdings.filter(h => h.subType === 'Fixed Deposit')
-  const canaraHoldings = data.holdings.filter(h => h.ticker?.startsWith('CANARA_'))
 
   function handleResetAll() {
     if (!confirmingReset) { setConfirmingReset(true); return }
@@ -1090,21 +1024,12 @@ export default function DataManagement() {
             <CryptoContent />
           </SourceRow>
 
-                    <SourceRow icon={<Building2 size={15} />} label="Canara Bank" color="emerald"
-            connected={canaraHoldings.length > 0}
-            statusLabel={canaraHoldings.length > 0
-              ? canaraHoldings.map(h => h.name.split('(')[0].trim() + ' ' + fmtINR(h.value)).join(' · ')
-              : 'Not imported — drop CSV/PDF files'}
-            onClear={canaraHoldings.length > 0 ? () => replaceData({ ...data, holdings: data.holdings.filter(h => !h.ticker?.startsWith('CANARA_')) }) : undefined}>
-            <CanaraContent />
-          </SourceRow>
-
-          <SourceRow icon={<Banknote size={15} />} label="Bank Statements" color="green"
+          <SourceRow icon={<Banknote size={15} />} label="Bank Accounts" color="green"
             connected={bankHoldings.length > 0}
             statusLabel={bankHoldings.length > 0
-              ? bankHoldings.map(h => `${h.name.split('—')[1]?.trim() ?? h.name} ${fmtINR(h.value)}`).join(' · ')
-              : 'Not imported — upload PDF statement'}
-            onClear={bankHoldings.length > 0 ? () => replaceData({ ...data, holdings: data.holdings.filter(h => h.subType !== 'Savings') }) : undefined}>
+              ? `${bankHoldings.length} account${bankHoldings.length > 1 ? 's' : ''} · ${fmtINR(bankHoldings.reduce((s, h) => s + h.value, 0))}`
+              : 'Not imported — drop any bank statement'}
+            onClear={bankHoldings.length > 0 ? () => replaceData({ ...data, holdings: data.holdings.filter(h => h.subType !== 'Savings' && !h.ticker?.startsWith('CANARA_')) }) : undefined}>
             <BankStatementContent />
           </SourceRow>
 
