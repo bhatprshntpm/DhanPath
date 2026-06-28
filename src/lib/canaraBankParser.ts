@@ -29,13 +29,21 @@ export interface CanaraParseResult {
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
-function parseAmount(s: string): number {
-  return parseFloat(s.replace(/[₹Rs.,\s]/g, '')) || 0
+// Extract first Indian-format number from a string (e.g. "Rs.27,903.51" → 27903.51)
+function extractNumber(s: string): number {
+  const m = s.match(/([\d,]+\.\d{1,2})/)
+  if (!m) return 0
+  return parseFloat(m[1].replace(/,/g, '')) || 0
 }
 
 // Strip Excel ="..." wrapper used in Canara CSV exports
 function stripExcel(s: string): string {
   return s.trim().replace(/^="?/, '').replace(/"$/, '').trim()
+}
+
+
+function parseAmount(s: string): number {
+  return extractNumber(s)
 }
 
 async function extractPDFText(file: File): Promise<string> {
@@ -68,20 +76,12 @@ function parseDateDMY(s: string): string {
 function parseSavingsCSV(text: string, filename: string): CanaraParseResult {
   const lines = text.split(/\r?\n/)
 
-  let accountNumber = ''
-  let closingBalance = 0
+  // Use regex on raw lines — avoids comma-in-quoted-field splitting issues
+  const accLine  = lines.find(l => /Account\s*Number/i.test(l.split(',')[0]))
+  const balLine  = lines.find(l => /Closing\s*Balance/i.test(l.split(',')[0]))
 
-  for (const line of lines) {
-    const parts = line.split(',')
-    const key = stripExcel(parts[0] ?? '')
-
-    if (/^Account\s*Number$/i.test(key)) {
-      accountNumber = stripExcel(parts[1] ?? '').replace(/\s+/g, '')
-    }
-    if (/^Closing\s*Balance$/i.test(key)) {
-      closingBalance = parseAmount(stripExcel(parts[1] ?? ''))
-    }
-  }
+  const accountNumber  = accLine  ? stripExcel(accLine.split(',').slice(1).join(',')).replace(/\s+/g,'') : ''
+  const closingBalance = balLine  ? extractNumber(balLine) : 0
 
   if (!accountNumber || closingBalance === 0) {
     return { status: 'error', message: 'Could not extract account/balance from savings CSV', accounts: [] }
@@ -103,24 +103,13 @@ function parseSavingsCSV(text: string, filename: string): CanaraParseResult {
 function parseFDCSV(text: string, filename: string): CanaraParseResult {
   const lines = text.split(/\r?\n/)
 
-  let accountNumber = ''
-  let principalAmount = 0
-  let closingBalance  = 0
+  const accLine   = lines.find(l => /Account\s*Number/i.test(l.split(',')[0]))
+  const prinLine  = lines.find(l => /Principal\s*Amount/i.test(l.split(',')[0]))
+  const balLine   = lines.find(l => /Closing\s*Balance/i.test(l.split(',')[0]))
 
-  for (const line of lines) {
-    const parts = line.split(',')
-    const key = stripExcel(parts[0] ?? '')
-
-    if (/^Account\s*Number$/i.test(key)) {
-      accountNumber = stripExcel(parts[1] ?? '').replace(/\s+/g, '')
-    }
-    if (/^Principal\s*Amount$/i.test(key)) {
-      principalAmount = parseAmount(stripExcel(parts[1] ?? ''))
-    }
-    if (/^Closing\s*Balance$/i.test(key)) {
-      closingBalance = parseAmount(stripExcel(parts[1] ?? ''))
-    }
-  }
+  const accountNumber   = accLine  ? stripExcel(accLine.split(',').slice(1).join(',')).replace(/\s+/g,'') : ''
+  const principalAmount = prinLine ? extractNumber(prinLine) : 0
+  const closingBalance  = balLine  ? extractNumber(balLine)  : 0
 
   // Skip matured/zero-value FDs
   if (principalAmount === 0 && closingBalance === 0) {
@@ -146,23 +135,28 @@ function parseFDCSV(text: string, filename: string): CanaraParseResult {
 // ── PDF parsers ──────────────────────────────────────────────────────────────
 
 function parsePPFPDF(text: string, filename: string): CanaraParseResult {
-  // PPF Account Number
   const accMatch = text.match(/PPF\s*Account\s*Number\s*[-–]\s*(PPF[\d]+)/i)
   const accountNumber = accMatch?.[1] ?? ''
 
-  // Maturity date
   const matMatch = text.match(/Maturity\s*Date\s+(\d{2}-[A-Z]{3}-\d{4})/i)
   const maturityDate = matMatch ? parseDateDMY(matMatch[1]) : ''
 
-  // Balance — last occurrence of a number like "3,21,797.00" near "Balance" column
-  // The text row ends with: "25,000.00 0.00 3,21,797.00"
-  // Grab the last balance-like number in the text
-  const balMatches = [...text.matchAll(/([\d,]+\.\d{2})/g)]
+  // Balance is the last column of the transaction row: "C  25,000.00  0.00  3,21,797.00"
+  // Find all numbers that look like Indian balances (e.g. 3,21,797.00)
+  // The PPF balance is the LAST number on the transaction data line
+  const txnLine = text.match(/PPF\s+SUBSCRIPTION\s+C[\s\d,\.]+/)
   let balance = 0
-  // Walk from end to find a plausible balance (skip tiny amounts < 100)
-  for (let i = balMatches.length - 1; i >= 0; i--) {
-    const v = parseAmount(balMatches[i][1])
-    if (v > 1000) { balance = v; break }
+  if (txnLine) {
+    const nums = [...txnLine[0].matchAll(/([\d,]+\.\d{2})/g)].map(m => parseFloat(m[1].replace(/,/g,'')))
+    // Last number in the row = balance
+    balance = nums.at(-1) ?? 0
+  }
+  // Fallback: last 6-digit+ number in the whole text
+  if (balance === 0) {
+    const allNums = [...text.matchAll(/([\d,]+\.\d{2})/g)]
+      .map(m => parseFloat(m[1].replace(/,/g,'')))
+      .filter(v => v > 10000)
+    balance = allNums.at(-1) ?? 0
   }
 
   if (!accountNumber || balance === 0) {
