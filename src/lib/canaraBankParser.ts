@@ -48,9 +48,9 @@ function parseAmount(s: string): number {
   return extractNumber(s)
 }
 
-async function extractPDFText(file: File): Promise<string> {
+async function extractPDFText(file: File, password = ''): Promise<string> {
   const buf  = await file.arrayBuffer()
-  const task = pdfjsLib.getDocument({ data: new Uint8Array(buf), password: '', standardFontDataUrl: '/standard_fonts/' })
+  const task = pdfjsLib.getDocument({ data: new Uint8Array(buf), password, standardFontDataUrl: '/standard_fonts/' })
   const pdf  = await task.promise
   const pages: string[] = []
   for (let i = 1; i <= pdf.numPages; i++) {
@@ -348,7 +348,42 @@ function parseHDFCFDSummaryPDF(text: string, filename: string): CanaraParseResul
   return { status: 'success', message: `${accounts.length} HDFC FDs parsed`, accounts }
 }
 
-export async function parseCanaraFile(file: File): Promise<CanaraParseResult> {
+// ── SBI One View Summary parser ───────────────────────────────────────────────
+
+function parseSBIOneViewPDF(text: string, filename: string): CanaraParseResult {
+  const accounts: CanaraAccount[] = []
+
+  // Accounts follow pattern: XXXXXXX<4chars> <branch with spaces> <ROI%> Single|Joint <balance>
+  // e.g. "XXXXXXX8415 Dombivli (east) 2.5 Single 25,401.00"
+  const rowRe = /XXXXXXX(\w{4})\s+[\w\s(),.-]+?\s+[\d.]+\s+(?:Single|Joint)\s+([\d,]+\.\d{2})/gi
+
+  // "Current Value" header separates savings section from deposits section
+  const splitIdx = text.search(/Current\s+Value/i)
+  const savingsText  = splitIdx > 0 ? text.slice(0, splitIdx)  : text
+  const depositsText = splitIdx > 0 ? text.slice(splitIdx)     : ''
+
+  for (const m of savingsText.matchAll(rowRe)) {
+    const balance = extractNumber(m[2])
+    if (balance > 0) accounts.push({
+      accountNumber: `XXXXXXX${m[1]}`, accountType: 'savings',
+      bank: 'SBI', bankCode: 'SBI', balance, isActive: true, sourceFile: filename,
+    })
+  }
+
+  for (const m of depositsText.matchAll(rowRe)) {
+    const balance = extractNumber(m[2])
+    if (balance > 0) accounts.push({
+      accountNumber: `XXXXXXX${m[1]}`, accountType: 'fd',
+      bank: 'SBI', bankCode: 'SBI', balance, isActive: true, sourceFile: filename,
+    })
+  }
+
+  if (accounts.length === 0)
+    return { status: 'error', message: 'No SBI accounts found in One View Summary', accounts: [] }
+  return { status: 'success', message: `${accounts.length} SBI accounts parsed`, accounts }
+}
+
+export async function parseCanaraFile(file: File, password = ''): Promise<CanaraParseResult> {
   const name = file.name.toLowerCase()
 
   try {
@@ -364,7 +399,10 @@ export async function parseCanaraFile(file: File): Promise<CanaraParseResult> {
     }
 
     if (name.endsWith('.pdf')) {
-      const text = await extractPDFText(file)
+      const text = await extractPDFText(file, password)
+      if (/MY\s+ACCOUNT\s+SUMMARY/i.test(text) || /Relationship\s+Summary/i.test(text)) {
+        return parseSBIOneViewPDF(text, file.name)
+      }
       if (/balance\s*certificate/i.test(text) && /CRN\s*:/i.test(text) && /(SAVING|TERM\s+DEPOSIT)\s+CR/i.test(text)) {
         return parseKotakBalancePDF(text, file.name)
       }

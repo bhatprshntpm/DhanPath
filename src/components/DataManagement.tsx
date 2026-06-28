@@ -651,7 +651,7 @@ const BANK_CONFIG: BankConfig[] = [
   { id: 'canara', label: 'Canara Bank',       parser: 'canara',  accepts: '.csv,.pdf', multiple: true,  hint: 'Drop savings CSV, FD receipt PDFs, or PPF PDF — all at once' },
   { id: 'kotak',  label: 'Kotak Bank',         parser: 'canara',  accepts: '.pdf',      multiple: false, hint: 'Balance Certificate PDF' },
   { id: 'hdfc',   label: 'HDFC Bank',          parser: 'canara',  accepts: '.pdf',      multiple: true,  hint: 'Balance Certificate PDF · FD Summary PDF — drop one or both' },
-  { id: 'sbi',    label: 'SBI',                parser: 'generic', accepts: '.pdf',      multiple: false, hint: 'Account statement PDF' },
+  { id: 'sbi',    label: 'SBI',                parser: 'canara',  accepts: '.pdf',      multiple: false, hint: 'One View Summary PDF (or any SBI statement)' },
   { id: 'axis',   label: 'Axis Bank',          parser: 'generic', accepts: '.pdf',      multiple: false, hint: 'Account statement PDF' },
   { id: 'icici',  label: 'ICICI Bank',         parser: 'generic', accepts: '.pdf',      multiple: false, hint: 'Account statement PDF' },
   { id: 'sc',     label: 'Standard Chartered', parser: 'generic', accepts: '.pdf',      multiple: false, hint: 'Account statement PDF' },
@@ -712,7 +712,7 @@ function BankStatementContent() {
     await Promise.all(Array.from(fileList).map(async f => {
       try {
         if (bank.parser === 'canara') {
-          const r = await parseCanaraFile(f)
+          const r = await parseCanaraFile(f, password)
           if (r.status === 'success') newItems.push(...canaraToItems(r))
           else if (r.status === 'error') newErrs.push(`${f.name}: ${r.message}`)
         } else {
@@ -821,8 +821,8 @@ function BankStatementContent() {
                 <input ref={fileRef} type="file" accept={bank.accepts} multiple={bank.multiple} className="hidden"
                   onChange={e => { if (e.target.files?.length) handleFiles(e.target.files); e.target.value = '' }} />
               </div>
-              {bank.parser === 'generic' && (
-                <input className="input-field text-sm" placeholder="PDF password (if protected)" value={password} onChange={e => setPassword(e.target.value)} />
+              {(bank.parser === 'generic' || bank.parser === 'canara') && (
+                <input className="input-field text-sm" placeholder="PDF password (if protected — leave blank if none)" value={password} onChange={e => setPassword(e.target.value)} />
               )}
             </div>
           )}
