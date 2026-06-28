@@ -405,6 +405,20 @@ function NPSUploadSection() {
     if (f?.type === 'application/pdf') handleFile(f)
   }
 
+  async function handlePPFFile(f: File) {
+    setPpfParsing(true); setPpfResult(null); setPpfImported(false)
+    const r = await parseCanaraFile(f)
+    const ppfOnly: CanaraParseResult = { ...r, accounts: r.accounts.filter(a => a.accountType === 'ppf') }
+    setPpfResult(ppfOnly.accounts.length > 0 ? ppfOnly : { status: 'error', message: 'No PPF account found in this file', accounts: [] })
+    setPpfParsing(false)
+  }
+
+  function doPPFImport() {
+    if (!ppfResult?.accounts.length) return
+    upsertHoldings(ppfResult.accounts.map(canaraAccountToHolding))
+    setPpfImported(true)
+  }
+
   function save() {
     if (!result || result.status !== 'success') return
     const newHoldings = npsToHoldings(result)
@@ -495,12 +509,16 @@ function NPSUploadSection() {
 }
 
 function RetirementContent() {
-  const { data, addHolding, deleteHolding } = useApp()
-  const [tab,       setTab]       = useState<'nps' | 'manual'>('nps')
+  const { data, addHolding, deleteHolding, upsertHoldings } = useApp()
+  const [tab,       setTab]       = useState<'ppf' | 'nps' | 'manual'>('ppf')
   const [type,      setType]      = useState('PPF')
   const [balance,   setBalance]   = useState('')
   const [costBasis, setCostBasis] = useState('')
   const [saved,     setSaved]     = useState(false)
+  const [ppfParsing,  setPpfParsing]  = useState(false)
+  const [ppfResult,   setPpfResult]   = useState<CanaraParseResult | null>(null)
+  const [ppfImported, setPpfImported] = useState(false)
+  const ppfFileRef = useRef<HTMLInputElement>(null)
 
   const nonNPS = data.holdings.filter(h =>
     ['PPF','VPF','Gratuity','Pension'].includes(h.subType ?? '') || h.ticker?.startsWith('CANARA_PPF')
@@ -529,7 +547,7 @@ function RetirementContent() {
       )}
       {/* Tab switcher */}
       <div className="flex bg-surface-100 rounded-lg p-0.5 gap-0.5 w-fit">
-        {([['nps', 'NPS Statement (PDF)'], ['manual', 'Manual Entry']] as const).map(([k, l]) => (
+        {([['ppf', 'PPF Statement'], ['nps', 'NPS Statement'], ['manual', 'Manual Entry']] as const).map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)}
             className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors
               ${tab === k ? 'bg-white text-surface-800 shadow-sm' : 'text-surface-400 hover:text-surface-600'}`}>
@@ -537,6 +555,53 @@ function RetirementContent() {
           </button>
         ))}
       </div>
+
+      {tab === 'ppf' && (
+        <div className="flex flex-col gap-3">
+          {!ppfResult && !ppfParsing && (
+            <div
+              className="border-2 border-dashed border-surface-200 hover:border-indigo-400 hover:bg-indigo-50/20 rounded-2xl p-6 flex flex-col items-center gap-3 cursor-pointer transition-all"
+              onClick={() => ppfFileRef.current?.click()}
+              onDragOver={e => e.preventDefault()}
+              onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handlePPFFile(f) }}>
+              <Upload size={20} className="text-surface-300" />
+              <div className="text-center">
+                <p className="text-sm font-semibold text-surface-700">Drop your PPF statement here</p>
+                <p className="text-xs text-surface-400 mt-0.5">Canara Bank PPF PDF</p>
+              </div>
+              <input ref={ppfFileRef} type="file" accept=".pdf,.csv" className="hidden"
+                onChange={e => { const f = e.target.files?.[0]; if (f) handlePPFFile(f); e.target.value = '' }} />
+            </div>
+          )}
+          {ppfParsing && <div className="flex items-center justify-center gap-3 py-8"><Loader2 size={18} className="animate-spin text-indigo-500" /><span className="text-sm text-surface-600">Parsing PPF statement…</span></div>}
+          {ppfResult?.status === 'error' && (
+            <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 flex flex-col gap-1">
+              <p className="text-xs text-rose-600">{ppfResult.message}</p>
+              <button onClick={() => setPpfResult(null)} className="text-xs text-rose-600 underline">Try again</button>
+            </div>
+          )}
+          {ppfResult?.status === 'success' && ppfResult.accounts.length > 0 && (
+            <div className="flex flex-col gap-3">
+              {ppfResult.accounts.map(acc => (
+                <div key={acc.accountNumber} className="bg-indigo-50/60 border border-indigo-100 rounded-xl p-4 flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-surface-800">{acc.accountNumber}</p>
+                    {acc.maturityDate && <p className="text-xs text-surface-400">Matures {new Date(acc.maturityDate).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}</p>}
+                  </div>
+                  <p className="text-lg font-bold text-indigo-700">{fmtINR(acc.balance)}</p>
+                </div>
+              ))}
+              {ppfImported
+                ? <div className="flex items-center gap-2 text-xs font-semibold text-emerald-700 bg-emerald-50 px-3 py-2.5 rounded-xl"><CheckCircle size={13} /> Saved</div>
+                : <div className="flex gap-3">
+                    <button onClick={() => setPpfResult(null)} className="btn-ghost text-xs flex items-center gap-1.5"><RefreshCw size={12} /> Different file</button>
+                    <button onClick={doPPFImport} className="btn-primary flex-1 flex items-center justify-center gap-2"><CheckCircle size={14} /> Save PPF balance</button>
+                  </div>
+              }
+            </div>
+          )}
+        </div>
+      )}
 
       {tab === 'nps' && <NPSUploadSection />}
 
