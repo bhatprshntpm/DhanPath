@@ -405,20 +405,6 @@ function NPSUploadSection() {
     if (f?.type === 'application/pdf') handleFile(f)
   }
 
-  async function handlePPFFile(f: File) {
-    setPpfParsing(true); setPpfResult(null); setPpfImported(false)
-    const r = await parseCanaraFile(f)
-    const ppfOnly: CanaraParseResult = { ...r, accounts: r.accounts.filter(a => a.accountType === 'ppf') }
-    setPpfResult(ppfOnly.accounts.length > 0 ? ppfOnly : { status: 'error', message: 'No PPF account found in this file', accounts: [] })
-    setPpfParsing(false)
-  }
-
-  function doPPFImport() {
-    if (!ppfResult?.accounts.length) return
-    upsertHoldings(ppfResult.accounts.map(canaraAccountToHolding))
-    setPpfImported(true)
-  }
-
   function save() {
     if (!result || result.status !== 'success') return
     const newHoldings = npsToHoldings(result)
@@ -510,11 +496,11 @@ function NPSUploadSection() {
 
 function RetirementContent() {
   const { data, addHolding, deleteHolding, upsertHoldings } = useApp()
-  const [tab,       setTab]       = useState<'ppf' | 'nps' | 'manual'>('ppf')
-  const [type,      setType]      = useState('PPF')
-  const [balance,   setBalance]   = useState('')
-  const [costBasis, setCostBasis] = useState('')
-  const [saved,     setSaved]     = useState(false)
+  const [tab,         setTab]         = useState<'ppf' | 'nps' | 'manual'>('ppf')
+  const [type,        setType]        = useState('PPF')
+  const [balance,     setBalance]     = useState('')
+  const [costBasis,   setCostBasis]   = useState('')
+  const [saved,       setSaved]       = useState(false)
   const [ppfParsing,  setPpfParsing]  = useState(false)
   const [ppfResult,   setPpfResult]   = useState<CanaraParseResult | null>(null)
   const [ppfImported, setPpfImported] = useState(false)
@@ -523,6 +509,20 @@ function RetirementContent() {
   const nonNPS = data.holdings.filter(h =>
     ['PPF','VPF','Gratuity','Pension'].includes(h.subType ?? '') || h.ticker?.startsWith('CANARA_PPF')
   )
+
+  async function handlePPFFile(f: File) {
+    setPpfParsing(true); setPpfResult(null); setPpfImported(false)
+    const r = await parseCanaraFile(f)
+    const ppfOnly: CanaraParseResult = { ...r, accounts: r.accounts.filter(a => a.accountType === 'ppf') }
+    setPpfResult(ppfOnly.accounts.length > 0 ? ppfOnly : { status: 'error', message: 'No PPF account found in this file', accounts: [] })
+    setPpfParsing(false)
+  }
+
+  function doPPFImport() {
+    if (!ppfResult?.accounts.length) return
+    upsertHoldings(ppfResult.accounts.map(canaraAccountToHolding))
+    setPpfImported(true)
+  }
 
   function save() {
     if (!balance) return
