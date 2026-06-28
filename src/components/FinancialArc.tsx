@@ -270,7 +270,11 @@ export default function FinancialArc() {
 
     projCur.forEach(p => {
       const pt = yearMap.get(p.year)
-      if (pt && p.year >= currentYear) pt.current = p.value
+      if (pt && p.year >= currentYear) {
+        pt.current = p.value
+        if (p.phase === 'accumulation') pt.accumulation = p.value
+        else pt.drawdown = p.value
+      }
     })
     projWi.forEach(p => {
       const pt = yearMap.get(p.year)
@@ -336,6 +340,20 @@ export default function FinancialArc() {
       {/* Chart */}
       <ResponsiveContainer width="100%" height={220}>
         <ComposedChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+          <defs>
+            <linearGradient id="gradAccumulation" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor="#10b981" stopOpacity={0.25} />
+              <stop offset="95%" stopColor="#10b981" stopOpacity={0.03} />
+            </linearGradient>
+            <linearGradient id="gradDrawdown" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.25} />
+              <stop offset="95%" stopColor="#f59e0b" stopOpacity={0.03} />
+            </linearGradient>
+            <linearGradient id="gradActual" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.35} />
+              <stop offset="95%" stopColor="#f59e0b" stopOpacity={0.05} />
+            </linearGradient>
+          </defs>
           <CartesianGrid strokeDasharray="3 3" stroke="#f5f5f4" vertical={false} />
           <XAxis dataKey="year" tick={{ fontSize: 11, fill: '#a8a29e' }} tickLine={false} axisLine={false}
             interval={Math.max(0, Math.floor(chartData.length / 7))} />
@@ -352,11 +370,35 @@ export default function FinancialArc() {
             <ReferenceLine key={g.id} x={yr} stroke="transparent"
               label={{ value: g.emoji, position: 'insideTop', fontSize: 16, offset: -4 }} />
           ))}
-          <Area dataKey="actual"  name="Actual"    fill="#fef3c7" stroke="#f59e0b" strokeWidth={2.5} dot={false} connectNulls />
-          <Line dataKey="current" name="Projected" stroke="#f59e0b" strokeWidth={2} strokeDasharray="6 3" dot={false} connectNulls />
-          {wiDiffers && <Line dataKey="whatif" name="What-if" stroke="#10b981" strokeWidth={2} strokeDasharray="6 3" dot={false} connectNulls />}
+          {/* Actual history — amber */}
+          <Area dataKey="actual" name="Actual" fill="url(#gradActual)" stroke="#f59e0b" strokeWidth={2.5} dot={false} connectNulls />
+          {/* Accumulation phase — green */}
+          <Area dataKey="accumulation" name="Accumulation" fill="url(#gradAccumulation)" stroke="#10b981" strokeWidth={2} strokeDasharray="6 3" dot={false} connectNulls legendType="none" />
+          {/* Drawdown phase — amber */}
+          <Area dataKey="drawdown" name="Drawdown" fill="url(#gradDrawdown)" stroke="#f59e0b" strokeWidth={2} strokeDasharray="6 3" dot={false} connectNulls legendType="none" />
+          {wiDiffers && <Line dataKey="whatif" name="What-if" stroke="#6366f1" strokeWidth={2} strokeDasharray="6 3" dot={false} connectNulls />}
         </ComposedChart>
       </ResponsiveContainer>
+
+      {/* Phase legend */}
+      {projCur.length > 0 && (
+        <div className="flex items-center gap-4 flex-wrap">
+          <span className="flex items-center gap-1.5 text-xs text-surface-500">
+            <span className="w-3 h-1 rounded-full inline-block" style={{ background: '#10b981' }} />
+            Accumulation (building wealth)
+          </span>
+          <span className="flex items-center gap-1.5 text-xs text-surface-500">
+            <span className="w-3 h-1 rounded-full inline-block" style={{ background: '#f59e0b' }} />
+            Drawdown (spending in retirement)
+          </span>
+          {wiDiffers && (
+            <span className="flex items-center gap-1.5 text-xs text-surface-500">
+              <span className="w-3 h-1 rounded-full inline-block" style={{ background: '#6366f1' }} />
+              What-if scenario
+            </span>
+          )}
+        </div>
+      )}
 
       {/* What-if SIP lever */}
       <div className="pt-3 border-t border-surface-100">
@@ -372,7 +414,12 @@ export default function FinancialArc() {
               </button>
             )}
           </div>
-          <Slider label="Extra SIP per month" value={extraSip} min={0} max={100000} step={1000}
+          <p className="text-[11px] text-emerald-700 italic">
+            I invest an extra{' '}
+            <span className="font-bold not-italic">{extraSip > 0 ? `₹${extraSip.toLocaleString('en-IN')}/mo` : '₹0'}</span>
+            {' '}on top of my current SIP
+          </p>
+          <Slider label="" value={extraSip} min={0} max={100000} step={1000}
             prefix="₹" onChange={v => { setExtraSip(v); setWiActive(v > 0) }} />
           {wiDiffers && yearsDelta !== null && (
             <div className={`flex items-center gap-2 py-1.5 px-3 rounded-lg text-xs font-semibold

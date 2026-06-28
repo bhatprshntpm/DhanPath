@@ -12,6 +12,7 @@ import DataManagement from './components/DataManagement'
 import HealthScoreCard from './components/HealthScoreCard'
 import MonthlyReportCard from './components/MonthlyReportCard'
 import DebtCard from './components/DebtCard'
+import PlanSummary from './components/PlanSummary'
 import { ONBOARD_KEY, isDemoMode } from './lib/demoData'
 import { DEFAULT_DATA } from './lib/storage'
 
@@ -44,6 +45,9 @@ function AppContent() {
 
         {/* Net worth + key metrics */}
         <HeroSection />
+
+        {/* Plan narrative */}
+        <PlanSummary />
 
         {/* What you own | How money moved */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">

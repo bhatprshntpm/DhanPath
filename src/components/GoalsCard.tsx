@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
-import { Plus, Trash2, ChevronDown, ChevronUp, Pencil, Check, X } from 'lucide-react'
+import { Plus, Trash2, ChevronDown, ChevronUp, Pencil, Check, X, TrendingUp } from 'lucide-react'
 import { useApp } from '../context/AppContext'
-import { fmtINR, projectLifetimeNoGoals } from '../lib/calc'
+import { fmtINR, projectLifetimeNoGoals, requiredMonthlySIP } from '../lib/calc'
 import EmptyState from './EmptyState'
 import type { Goal } from '../types'
 
@@ -14,12 +14,14 @@ const PRIORITY_STYLES: Record<Goal['priority'], string> = {
 }
 
 const PRESET_GOALS: (Omit<Goal, 'id'> & { inflationRate: number })[] = [
-  { name: 'Buy a House',      targetAge: 35, amountToday: 300000, inflate: true, priority: 'Must',   enabled: true, emoji: '🏠', inflationRate: 6 },
-  { name: "Kid's Education",  targetAge: 48, amountToday: 150000, inflate: true, priority: 'Must',   enabled: true, emoji: '🎓', inflationRate: 8 },
-  { name: 'Dream Vacation',   targetAge: 40, amountToday: 20000,  inflate: true, priority: 'Nice',   enabled: true, emoji: '✈️', inflationRate: 5 },
-  { name: 'Car Upgrade',      targetAge: 38, amountToday: 50000,  inflate: true, priority: 'Should', enabled: true, emoji: '🚗', inflationRate: 4 },
-  { name: 'Wedding Fund',     targetAge: 33, amountToday: 40000,  inflate: false,priority: 'Must',   enabled: true, emoji: '💍', inflationRate: 5 },
-  { name: 'Emergency Fund',   targetAge: 32, amountToday: 30000,  inflate: false,priority: 'Must',   enabled: true, emoji: '🏦', inflationRate: 5 },
+  { name: 'Buy a House',      targetAge: 35, amountToday: 300000, inflate: true,  priority: 'Must',   enabled: true, emoji: '🏠', inflationRate: 6 },
+  { name: "Kid's Education",  targetAge: 48, amountToday: 150000, inflate: true,  priority: 'Must',   enabled: true, emoji: '🎓', inflationRate: 8 },
+  { name: 'Dream Vacation',   targetAge: 40, amountToday: 20000,  inflate: true,  priority: 'Nice',   enabled: true, emoji: '✈️', inflationRate: 5 },
+  { name: 'Car Upgrade',      targetAge: 38, amountToday: 50000,  inflate: true,  priority: 'Should', enabled: true, emoji: '🚗', inflationRate: 4 },
+  { name: 'Wedding Fund',     targetAge: 33, amountToday: 40000,  inflate: false, priority: 'Must',   enabled: true, emoji: '💍', inflationRate: 5 },
+  { name: 'Emergency Fund',   targetAge: 32, amountToday: 30000,  inflate: false, priority: 'Must',   enabled: true, emoji: '🏦', inflationRate: 5 },
+  { name: 'Retirement',       targetAge: 60, amountToday: 0,      inflate: true,  priority: 'Must',   enabled: true, emoji: '🌴', inflationRate: 6 },
+  { name: 'Start a Business', targetAge: 45, amountToday: 50000,  inflate: true,  priority: 'Should', enabled: true, emoji: '🚀', inflationRate: 5 },
 ]
 
 type GoalDraft = Omit<Goal, 'id'> & { inflationRate: number }
@@ -29,12 +31,38 @@ const BLANK_DRAFT: GoalDraft = {
   priority: 'Must', enabled: true, emoji: '🎯', inflationRate: 6,
 }
 
+function goalSentence(g: Goal, cost: number, yrsAway: number): string {
+  const costStr = fmtINR(Math.round(cost))
+  const n = g.name.toLowerCase()
+  if (n.includes('house') || n.includes('home') || n.includes('property') || n.includes('flat') || n.includes('apartment')) {
+    return `I will buy a home at age ${g.targetAge} — ${costStr} in today's money`
+  }
+  if (n.includes('education') || n.includes('college') || n.includes('school') || n.includes('degree') || n.includes("kid")) {
+    return `I will fund ${g.name} — ${costStr} at today's prices, needed at age ${g.targetAge}`
+  }
+  if (n.includes('retire') || n.includes('freedom') || n.includes('fire')) {
+    return `I will be financially free at age ${g.targetAge}, spending ${costStr}/mo in today's money`
+  }
+  if (n.includes('vacation') || n.includes('travel') || n.includes('trip') || n.includes('holiday')) {
+    return `I will take ${g.name} at age ${g.targetAge} — budgeting ${costStr}`
+  }
+  if (n.includes('car') || n.includes('vehicle') || n.includes('bike')) {
+    return `I will buy a ${g.name} at age ${g.targetAge} for ${costStr}`
+  }
+  if (n.includes('wedding') || n.includes('marriage')) {
+    return `I will celebrate ${g.name} at age ${g.targetAge} — ${costStr}`
+  }
+  if (n.includes('emergency') || n.includes('corpus')) {
+    return `I will build a ${g.name} of ${costStr} by age ${g.targetAge}`
+  }
+  if (n.includes('business') || n.includes('startup')) {
+    return `I will launch ${g.name} at age ${g.targetAge} — ${costStr} needed`
+  }
+  return `I will reach ${g.name} by age ${g.targetAge} — ${costStr}${yrsAway > 0 ? ` · ${yrsAway} yrs away` : ''}`
+}
+
 function GoalForm({
-  initial,
-  onSave,
-  onCancel,
-  currentAge,
-  label,
+  initial, onSave, onCancel, currentAge, label,
 }: {
   initial: GoalDraft
   onSave: (g: GoalDraft) => void
@@ -43,8 +71,8 @@ function GoalForm({
   label: string
 }) {
   const [draft, setDraft] = useState<GoalDraft>({ ...initial })
-  const yearsAway  = draft.targetAge - currentAge
-  const inflated   = draft.inflate && yearsAway > 0
+  const yearsAway = draft.targetAge - currentAge
+  const inflated  = draft.inflate && yearsAway > 0
     ? draft.amountToday * Math.pow(1 + draft.inflationRate / 100, yearsAway)
     : draft.amountToday
 
@@ -72,7 +100,7 @@ function GoalForm({
             onChange={e => setDraft(v => ({ ...v, targetAge: parseInt(e.target.value) || 40 }))} />
         </div>
         <div>
-          <label className="text-[10px] text-surface-400 font-semibold uppercase tracking-widest">Amount Today ($)</label>
+          <label className="text-[10px] text-surface-400 font-semibold uppercase tracking-widest">Amount Today (₹)</label>
           <input className="input-field mt-0.5" type="number"
             value={draft.amountToday}
             onChange={e => setDraft(v => ({ ...v, amountToday: parseFloat(e.target.value) || 0 }))} />
@@ -127,7 +155,6 @@ export default function GoalsCard() {
 
   const { settings, scenarios } = data
 
-  // Compute portfolio trajectory without goals to assess funding
   const nwNow = useMemo(() => {
     if (data.holdings.length > 0) return data.holdings.reduce((a, h) => a + h.value, 0)
     const sorted = [...data.snapshots].sort((a, b) => a.date.localeCompare(b.date))
@@ -140,22 +167,31 @@ export default function GoalsCard() {
     baseline ? projectLifetimeNoGoals(nwNow, settings, baseline) : [],
   [baseline, nwNow, settings])
 
+  const requiredSIP = useMemo(() => {
+    if (!baseline || data.goals.filter(g => g.enabled).length === 0) return null
+    return requiredMonthlySIP(nwNow, settings, baseline, data.goals.filter(g => g.enabled))
+  }, [baseline, nwNow, settings, data.goals])
+
+  const currentSIP = baseline?.assumptions.extraMonthlySavings ?? 0
+  const sipGap = requiredSIP != null ? Math.max(requiredSIP - currentSIP, 0) : 0
+  const enabledGoals = data.goals.filter(g => g.enabled)
+
   function goalFunding(g: Goal) {
-    const yrsAway    = Math.max(g.targetAge - settings.currentAge, 0)
-    const inf        = settings.inflationRate / 100
-    const cost       = g.inflate ? g.amountToday * Math.pow(1 + inf, yrsAway) : g.amountToday
-    const currentYear = new Date().getFullYear()
-    const goalYear   = currentYear + yrsAway
+    const yrsAway         = Math.max(g.targetAge - settings.currentAge, 0)
+    const inf             = settings.inflationRate / 100
+    const cost            = g.inflate ? g.amountToday * Math.pow(1 + inf, yrsAway) : g.amountToday
+    const currentYear     = new Date().getFullYear()
+    const goalYear        = currentYear + yrsAway
     const portfolioAtGoal = projNoGoals.find(p => p.year === goalYear)?.value ?? 0
-    const funded     = portfolioAtGoal > 0 ? Math.min((portfolioAtGoal / cost) * 100, 100) : 0
-    const gap        = Math.max(cost - portfolioAtGoal, 0)
-    // Monthly SIP needed: PMT = FV * r / ((1+r)^n - 1)
-    const r          = (settings.annualReturn / 100) / 12
-    const n          = yrsAway * 12
-    const sipNeeded  = gap > 0 && n > 0 && r > 0
+    const funded          = portfolioAtGoal > 0 ? Math.min((portfolioAtGoal / cost) * 100, 100) : 0
+    const gap             = Math.max(cost - portfolioAtGoal, 0)
+    const r               = (settings.annualReturn / 100) / 12
+    const n               = yrsAway * 12
+    const sipNeeded       = gap > 0 && n > 0 && r > 0
       ? Math.round(gap * r / (Math.pow(1 + r, n) - 1))
       : 0
-    return { cost, funded, gap, sipNeeded, portfolioAtGoal }
+    const savingsAllocated = Math.min(portfolioAtGoal, cost)
+    return { cost, funded, gap, sipNeeded, portfolioAtGoal, savingsAllocated }
   }
 
   function saveGoal(draft: GoalDraft) {
@@ -193,7 +229,32 @@ export default function GoalsCard() {
         </div>
       </div>
 
-      {/* Inline edit form — shown above chips when editing */}
+      {/* SIP headline — shown when there are enabled goals */}
+      {enabledGoals.length > 0 && requiredSIP != null && (
+        <div className={`flex items-center gap-3 rounded-xl px-4 py-3 border ${
+          sipGap > 0
+            ? 'bg-amber-50 border-amber-200'
+            : 'bg-emerald-50 border-emerald-200'
+        }`}>
+          <TrendingUp size={18} className={sipGap > 0 ? 'text-amber-500' : 'text-emerald-500'} />
+          <div>
+            <p className={`text-sm font-bold ${sipGap > 0 ? 'text-amber-800' : 'text-emerald-800'}`}>
+              Invest {fmtINR(requiredSIP)}/mo towards {enabledGoals.length} goal{enabledGoals.length !== 1 ? 's' : ''}
+            </p>
+            {sipGap > 0 ? (
+              <p className="text-xs text-amber-600 mt-0.5">
+                You're investing {fmtINR(currentSIP)}/mo now — need {fmtINR(sipGap)}/mo more
+              </p>
+            ) : (
+              <p className="text-xs text-emerald-600 mt-0.5">
+                Your current SIP of {fmtINR(currentSIP)}/mo covers all goals
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Inline edit form */}
       {editingId && (() => {
         const g = data.goals.find(x => x.id === editingId)
         if (!g) return null
@@ -209,8 +270,8 @@ export default function GoalsCard() {
         )
       })()}
 
-      {/* Active goals chips */}
-      <div className="flex flex-wrap gap-2">
+      {/* Goal cards */}
+      <div className="flex flex-col gap-3">
         {data.goals.length === 0 && !expanded && (
           <EmptyState
             title="No financial goals set"
@@ -223,37 +284,63 @@ export default function GoalsCard() {
           <p className="text-xs text-surface-300 italic">No goals yet — add some below</p>
         )}
         {data.goals.map(g => {
-          const { cost, funded, sipNeeded } = goalFunding(g)
-          const isFunded = funded >= 95
-          const yrsAway  = Math.max(g.targetAge - settings.currentAge, 0)
+          const { cost, funded, sipNeeded, savingsAllocated, gap } = goalFunding(g)
+          const isFunded  = funded >= 95
+          const yrsAway   = Math.max(g.targetAge - settings.currentAge, 0)
+          const sentence  = goalSentence(g, g.amountToday, yrsAway)
           return (
             <div key={g.id}
-              className={`flex flex-col gap-2 px-3 py-2.5 rounded-xl border text-xs font-medium transition-opacity ${PRIORITY_STYLES[g.priority]} ${!g.enabled ? 'opacity-40' : ''}`}>
-              <div className="flex items-center gap-2">
-                <span>{g.emoji}</span>
+              className={`flex flex-col gap-3 px-4 py-3.5 rounded-2xl border transition-opacity ${PRIORITY_STYLES[g.priority]} ${!g.enabled ? 'opacity-40' : ''}`}>
+              {/* Header row */}
+              <div className="flex items-start gap-2.5">
+                <span className="text-xl mt-0.5">{g.emoji}</span>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="font-semibold">{g.name}</span>
-                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${isFunded ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-600'}`}>
-                      {isFunded ? '✓ Funded' : `${Math.round(funded)}%`}
-                    </span>
+                    <span className="text-sm font-bold">{g.name}</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                        isFunded ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-600'
+                      }`}>
+                        {isFunded ? '✓ Funded' : `${Math.round(funded)}%`}
+                      </span>
+                      <button onClick={e => { e.stopPropagation(); setEditingId(g.id) }}
+                        className="opacity-40 hover:opacity-100 transition-opacity"><Pencil size={11}/></button>
+                      <button onClick={e => { e.stopPropagation(); deleteGoal(g.id) }}
+                        className="opacity-40 hover:opacity-100 transition-opacity"><Trash2 size={11}/></button>
+                    </div>
                   </div>
-                  <div className="font-normal opacity-70">Age {g.targetAge} · {fmtINR(Math.round(cost))}{yrsAway > 0 ? ` · ${yrsAway}yr away` : ''}</div>
+                  {/* Plain-English sentence */}
+                  <p className="text-xs opacity-80 mt-0.5 leading-relaxed">{sentence}</p>
                 </div>
-                <button onClick={e => { e.stopPropagation(); setEditingId(g.id) }}
-                  className="opacity-40 hover:opacity-100 transition-opacity"><Pencil size={11}/></button>
-                <button onClick={e => { e.stopPropagation(); deleteGoal(g.id) }}
-                  className="opacity-40 hover:opacity-100 transition-opacity"><Trash2 size={11}/></button>
               </div>
+
+              {/* Progress + allocation row */}
               {nwNow > 0 && yrsAway > 0 && (
-                <div className="flex flex-col gap-1">
+                <div className="flex flex-col gap-2">
                   <div className="w-full bg-white/60 rounded-full h-1.5 overflow-hidden">
                     <div className={`h-1.5 rounded-full transition-all ${isFunded ? 'bg-emerald-500' : 'bg-rose-400'}`}
                       style={{ width: `${Math.round(funded)}%` }} />
                   </div>
-                  {!isFunded && sipNeeded > 0 && (
-                    <p className="text-[10px] opacity-70">Need <span className="font-semibold">{fmtINR(sipNeeded)}/mo</span> additional SIP to fully fund</p>
-                  )}
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <p className="text-[10px] opacity-60 uppercase tracking-wide font-semibold">Goal cost</p>
+                      <p className="text-xs font-semibold font-mono">{fmtINR(Math.round(cost))}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] opacity-60 uppercase tracking-wide font-semibold">Savings covers</p>
+                      <p className={`text-xs font-semibold font-mono ${isFunded ? 'text-emerald-700' : ''}`}>
+                        {fmtINR(Math.round(savingsAllocated))}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] opacity-60 uppercase tracking-wide font-semibold">
+                        {sipNeeded > 0 ? 'SIP needed' : 'Gap'}
+                      </p>
+                      <p className={`text-xs font-semibold font-mono ${!isFunded && sipNeeded > 0 ? 'text-rose-600' : ''}`}>
+                        {sipNeeded > 0 ? `${fmtINR(sipNeeded)}/mo` : gap > 0 ? fmtINR(Math.round(gap)) : '—'}
+                      </p>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
@@ -263,8 +350,6 @@ export default function GoalsCard() {
 
       {expanded && (
         <div className="flex flex-col gap-3 pt-2 border-t border-surface-100 animate-fade-up">
-
-          {/* Preset quick-add buttons — click to open editable form */}
           {!draftPreset && !showCustom && (
             <div>
               <p className="text-xs text-surface-300 font-medium mb-2">
@@ -289,7 +374,6 @@ export default function GoalsCard() {
             </div>
           )}
 
-          {/* Preset draft form */}
           {draftPreset && (
             <GoalForm
               initial={draftPreset}
@@ -300,7 +384,6 @@ export default function GoalsCard() {
             />
           )}
 
-          {/* Custom goal form */}
           {showCustom && (
             <GoalForm
               initial={BLANK_DRAFT}
