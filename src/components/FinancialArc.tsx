@@ -272,8 +272,8 @@ export default function FinancialArc() {
       const pt = yearMap.get(p.year)
       if (pt && p.year >= currentYear) {
         pt.current = p.value
-        if (p.phase === 'accumulation') pt.accumulation = p.value
-        else pt.drawdown = p.value
+        if (p.phase === 'accumulation' || p.year === retireYear) pt.accumulation = p.value
+        if (p.phase === 'drawdown'     || p.year === retireYear) pt.drawdown     = p.value
       }
     })
     projWi.forEach(p => {
@@ -281,7 +281,7 @@ export default function FinancialArc() {
       if (pt && p.year >= currentYear) pt.whatif = p.value
     })
     return Array.from(yearMap.values()).sort((a, b) => a.year - b.year)
-  }, [rows, projCur, projWi, startYear, endYear, currentYear, currentMonth, settings, nwNow])
+  }, [rows, projCur, projWi, startYear, endYear, currentYear, currentMonth, settings, nwNow, retireYear])
 
   const chartData = allChartData.filter(d => d.year >= windowStart && d.year <= windowEnd)
 
