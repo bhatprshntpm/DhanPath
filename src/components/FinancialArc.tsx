@@ -322,7 +322,6 @@ export default function FinancialArc() {
     : 0
   const withdrawalPerMonth = corpusAtFire * (settings.safeWithdrawalRate / 100) / 12
 
-  const wiDiffers = wiActive && extraSip > 0
 
   return (
     <div className="card p-5 flex flex-col gap-4">
