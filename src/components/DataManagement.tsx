@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
 import {
-  ChevronDown, ChevronRight, Upload, CheckCircle, Loader2, X,
+  ChevronDown, ChevronRight, ChevronLeft, Upload, CheckCircle, Loader2, X,
   RefreshCw, RotateCcw, TrendingUp, Landmark, Coins, DollarSign, Wallet, Building2, Banknote,
 } from 'lucide-react'
 import ImportCard from './ImportCard'
@@ -633,19 +633,30 @@ function RetirementContent() {
 }
 
 
-// ─── Bank Accounts (unified — any bank, any file type) ───────────────────────
+// ─── Bank Accounts ────────────────────────────────────────────────────────────
 
 interface BankItem {
-  key:           string
-  bank:          string
-  typeLabel:     string
-  typeColor:     string
-  accountSuffix: string
-  balance:       number
-  maturityDate?: string
-  holding:       Omit<Holding, 'id'>
-  snapshot?:     any
+  key: string; bank: string; typeLabel: string; typeColor: string
+  accountSuffix: string; balance: number; maturityDate?: string
+  holding: Omit<Holding, 'id'>; snapshot?: any
 }
+
+interface BankConfig {
+  id: string; label: string; parser: 'canara' | 'generic' | 'manual'
+  accepts: string; multiple: boolean
+  hint: string; notice?: string
+}
+
+const BANK_CONFIG: BankConfig[] = [
+  { id: 'canara', label: 'Canara Bank',       parser: 'canara',  accepts: '.csv,.pdf', multiple: true,  hint: 'Drop savings CSV, FD receipt PDFs, or PPF PDF — all at once' },
+  { id: 'kotak',  label: 'Kotak Bank',         parser: 'canara',  accepts: '.pdf',      multiple: false, hint: 'Balance Certificate PDF' },
+  { id: 'hdfc',   label: 'HDFC Bank',          parser: 'manual',  accepts: '.pdf',      multiple: false, hint: 'Enter manually', notice: 'HDFC PDFs use a font encoding that browsers can\'t decode. Enter your savings balance below — add FDs via the Fixed Deposits section.' },
+  { id: 'sbi',    label: 'SBI',                parser: 'generic', accepts: '.pdf',      multiple: false, hint: 'Account statement PDF' },
+  { id: 'axis',   label: 'Axis Bank',          parser: 'generic', accepts: '.pdf',      multiple: false, hint: 'Account statement PDF' },
+  { id: 'icici',  label: 'ICICI Bank',         parser: 'generic', accepts: '.pdf',      multiple: false, hint: 'Account statement PDF' },
+  { id: 'sc',     label: 'Standard Chartered', parser: 'generic', accepts: '.pdf',      multiple: false, hint: 'Account statement PDF' },
+  { id: 'other',  label: 'Other',              parser: 'generic', accepts: '.pdf',      multiple: false, hint: 'Account statement PDF' },
+]
 
 function canaraToItems(r: CanaraParseResult): BankItem[] {
   return r.accounts.map(acc => ({
@@ -677,37 +688,38 @@ function genericToItem(r: BankParseResult): BankItem {
 function BankStatementContent() {
   const { data, upsertHoldings, addOrUpdateSnapshot, deleteHolding } = useApp()
   const fileRef = useRef<HTMLInputElement>(null)
-  const [parsing,    setParsing]    = useState(false)
-  const [items,      setItems]      = useState<BankItem[]>([])
-  const [errs,       setErrs]       = useState<string[]>([])
-  const [imported,   setImported]   = useState(false)
-  const [password,   setPassword]   = useState('')
-  const [manualBank, setManualBank] = useState('')
+  const [bank,     setBank]     = useState<BankConfig | null>(null)
+  const [parsing,  setParsing]  = useState(false)
+  const [items,    setItems]    = useState<BankItem[]>([])
+  const [errs,     setErrs]     = useState<string[]>([])
+  const [imported, setImported] = useState(false)
+  const [password, setPassword] = useState('')
+  const [manualAcct, setManualAcct] = useState('')
   const [manualBal,  setManualBal]  = useState('')
   const [manualSaved,setManualSaved]= useState(false)
 
   const bankHoldings = data.holdings.filter(h => h.subType === 'Savings')
 
+  function pickBank(b: BankConfig) {
+    setBank(b); setItems([]); setErrs([]); setImported(false); setPassword('')
+  }
+  function back() { setBank(null); setItems([]); setErrs([]) }
+
   async function handleFiles(fileList: FileList | File[]) {
+    if (!bank) return
     setParsing(true); setItems([]); setErrs([]); setImported(false)
-    const newItems: BankItem[] = []
-    const newErrs:  string[]   = []
+    const newItems: BankItem[] = []; const newErrs: string[] = []
     await Promise.all(Array.from(fileList).map(async f => {
       try {
-        if (f.name.toLowerCase().endsWith('.csv')) {
+        if (bank.parser === 'canara') {
           const r = await parseCanaraFile(f)
           if (r.status === 'success') newItems.push(...canaraToItems(r))
           else if (r.status === 'error') newErrs.push(`${f.name}: ${r.message}`)
         } else {
-          const cr = await parseCanaraFile(f)
-          if (cr.status === 'success') {
-            newItems.push(...canaraToItems(cr))
-          } else {
-            const gr = await parseIndianBankPDF(f, password || undefined)
-            if (gr.status === 'success') newItems.push(genericToItem(gr))
-            else if (gr.status === 'password_required') newErrs.push(`${f.name}: Password required — enter it below and retry`)
-            else if (gr.status !== 'no_data') newErrs.push(`${f.name}: ${gr.message}`)
-          }
+          const gr = await parseIndianBankPDF(f, password || undefined)
+          if (gr.status === 'success') newItems.push(genericToItem(gr))
+          else if (gr.status === 'password_required') newErrs.push(`Password required — enter it below then retry`)
+          else if (gr.status !== 'no_data') newErrs.push(`${f.name}: ${gr.message}`)
         }
       } catch (e: any) { newErrs.push(`${f.name}: ${e?.message ?? 'Parse failed'}`) }
     }))
@@ -725,27 +737,25 @@ function BankStatementContent() {
       if (sv) bd['Cash & Savings'] = sv
       if (fd) bd['Debt'] = (bd['Debt'] ?? 0) + fd
       if (pp) bd['EPF / NPS / PPF'] = (bd['EPF / NPS / PPF'] ?? 0) + pp
-      addOrUpdateSnapshot({
-        date: new Date().toISOString().slice(0, 7),
-        assets: { checking: 0, savings: sv, brokerage: 0, retirement: pp, realEstate: 0, other: 0 },
-        liabilities: { mortgage: 0, studentLoans: 0, creditCards: 0, autoLoans: 0, other: 0 },
-        breakdown: bd,
-      })
+      addOrUpdateSnapshot({ date: new Date().toISOString().slice(0, 7), assets: { checking: 0, savings: sv, brokerage: 0, retirement: pp, realEstate: 0, other: 0 }, liabilities: { mortgage: 0, studentLoans: 0, creditCards: 0, autoLoans: 0, other: 0 }, breakdown: bd })
     }
     setImported(true)
   }
 
   function saveManual() {
-    if (!manualBank || !manualBal) return
-    upsertHoldings([{ name: `Savings — ${manualBank}`, ticker: `SAV-${manualBank.toUpperCase().replace(/\s/g,'')}`, type: 'cash', assetClass: 'Cash & Savings', subType: 'Savings', qty: 1, lastPrice: parseFloat(manualBal), value: parseFloat(manualBal), costBasis: parseFloat(manualBal) }])
+    if (!bank || !manualBal) return
+    const ticker = `SAV-${bank.id.toUpperCase()}${manualAcct ? `_${manualAcct.slice(-4)}` : ''}`
+    const name   = `${bank.label} Savings${manualAcct ? ` (····${manualAcct.slice(-4)})` : ''}`
+    upsertHoldings([{ name, ticker, type: 'cash', assetClass: 'Cash & Savings', subType: 'Savings', qty: 1, lastPrice: parseFloat(manualBal), value: parseFloat(manualBal), costBasis: parseFloat(manualBal) }])
     setManualSaved(true)
-    setTimeout(() => { setManualSaved(false); setManualBank(''); setManualBal('') }, 2000)
+    setTimeout(() => { setManualSaved(false); setManualBal(''); setManualAcct('') }, 2000)
   }
 
   return (
     <div className="flex flex-col gap-4">
 
-      {bankHoldings.length > 0 && !items.length && (
+      {/* Saved accounts */}
+      {bankHoldings.length > 0 && (
         <div className="flex flex-col gap-1.5 p-3 bg-surface-50 rounded-xl border border-surface-100">
           <p className="text-xs font-semibold text-surface-600 mb-0.5">Saved accounts</p>
           {bankHoldings.map(h => (
@@ -757,52 +767,99 @@ function BankStatementContent() {
         </div>
       )}
 
-      {!items.length && !parsing && (
-        <div className="flex flex-col gap-2">
-          <div
-            className="border-2 border-dashed border-surface-200 hover:border-green-400 hover:bg-green-50/20 rounded-2xl p-6 flex flex-col items-center gap-3 cursor-pointer transition-all"
-            onClick={() => fileRef.current?.click()}
-            onDragOver={e => e.preventDefault()}
-            onDrop={e => { e.preventDefault(); if (e.dataTransfer.files.length) handleFiles(e.dataTransfer.files) }}>
-            <Upload size={22} className="text-surface-300" />
-            <div className="text-center">
-              <p className="text-sm font-semibold text-surface-700">Drop bank statements here</p>
-              <p className="text-xs text-surface-400 mt-0.5">PDF or CSV · multiple files at once · any bank</p>
-            </div>
-            <input ref={fileRef} type="file" accept=".pdf,.csv" multiple className="hidden"
-              onChange={e => { if (e.target.files?.length) handleFiles(e.target.files); e.target.value = '' }} />
+      {/* Step 1 — pick bank */}
+      {!bank && (
+        <div className="flex flex-col gap-2.5">
+          <p className="text-xs font-semibold text-surface-500">Which bank?</p>
+          <div className="flex flex-wrap gap-2">
+            {BANK_CONFIG.map(b => (
+              <button key={b.id} onClick={() => pickBank(b)}
+                className="px-3.5 py-2 rounded-xl border border-surface-200 text-xs font-semibold text-surface-700 hover:border-green-400 hover:bg-green-50/30 hover:text-green-700 transition-all">
+                {b.label}
+              </button>
+            ))}
           </div>
-          <input className="input-field text-sm" placeholder="PDF password (if protected — leave blank if none)" value={password} onChange={e => setPassword(e.target.value)} />
-          <p className="text-[10px] text-surface-400 px-1">Canara (savings CSV · FD receipt PDF · PPF PDF) · HDFC · SBI · Kotak · Axis · ICICI · Standard Chartered · Mahindra Finance</p>
         </div>
       )}
 
-      {parsing && <div className="flex items-center justify-center gap-3 py-10"><Loader2 size={18} className="animate-spin text-green-500" /><span className="text-sm text-surface-600">Parsing files…</span></div>}
+      {/* Step 2 — upload or manual */}
+      {bank && !parsing && items.length === 0 && (
+        <div className="flex flex-col gap-3">
+          <button onClick={back} className="flex items-center gap-1 text-xs text-surface-400 hover:text-surface-700 w-fit transition-colors">
+            <ChevronLeft size={13} /> {bank.label}
+          </button>
 
+          {bank.parser === 'manual' ? (
+            <div className="flex flex-col gap-3">
+              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5">{bank.notice}</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-surface-400 uppercase tracking-widest block mb-1.5">Account Number</label>
+                  <input className="input-field" placeholder="Last 4 digits OK" value={manualAcct} onChange={e => setManualAcct(e.target.value)} />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-surface-400 uppercase tracking-widest block mb-1.5">Savings Balance (₹)</label>
+                  <input className="input-field" type="number" placeholder="e.g. 102826" value={manualBal} onChange={e => setManualBal(e.target.value)} />
+                </div>
+              </div>
+              <button onClick={saveManual} disabled={!manualBal} className="btn-primary disabled:opacity-40 flex items-center justify-center gap-2">
+                {manualSaved ? <><CheckCircle size={14} /> Saved!</> : `Save ${bank.label} savings`}
+              </button>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              <div
+                className="border-2 border-dashed border-surface-200 hover:border-green-400 hover:bg-green-50/20 rounded-2xl p-6 flex flex-col items-center gap-3 cursor-pointer transition-all"
+                onClick={() => fileRef.current?.click()}
+                onDragOver={e => e.preventDefault()}
+                onDrop={e => { e.preventDefault(); if (e.dataTransfer.files.length) handleFiles(e.dataTransfer.files) }}>
+                <Upload size={20} className="text-surface-300" />
+                <div className="text-center">
+                  <p className="text-sm font-semibold text-surface-700">{bank.hint}</p>
+                  <p className="text-xs text-surface-400 mt-0.5">{bank.multiple ? 'Multiple files OK — drop all at once' : 'Drop here or click to browse'}</p>
+                </div>
+                <input ref={fileRef} type="file" accept={bank.accepts} multiple={bank.multiple} className="hidden"
+                  onChange={e => { if (e.target.files?.length) handleFiles(e.target.files); e.target.value = '' }} />
+              </div>
+              {bank.parser === 'generic' && (
+                <input className="input-field text-sm" placeholder="PDF password (if protected)" value={password} onChange={e => setPassword(e.target.value)} />
+              )}
+            </div>
+          )}
+
+          {errs.length > 0 && (
+            <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 flex flex-col gap-1">
+              {errs.map((e, i) => <p key={i} className="text-xs text-rose-600">⚠ {e}</p>)}
+              <button onClick={() => setErrs([])} className="text-xs text-rose-600 underline mt-0.5">Try again</button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {parsing && <div className="flex items-center justify-center gap-3 py-10"><Loader2 size={18} className="animate-spin text-green-500" /><span className="text-sm text-surface-600">Parsing…</span></div>}
+
+      {/* Preview */}
       {!parsing && items.length > 0 && (
         <div className="flex flex-col gap-3">
-          <p className="text-[10px] uppercase tracking-widest font-semibold text-surface-400">
-            Preview — {items.length} account{items.length !== 1 ? 's' : ''} found
-          </p>
+          <button onClick={back} className="flex items-center gap-1 text-xs text-surface-400 hover:text-surface-700 w-fit transition-colors">
+            <ChevronLeft size={13} /> {bank?.label ?? 'Back'}
+          </button>
+          <p className="text-[10px] uppercase tracking-widest font-semibold text-surface-400">{items.length} account{items.length !== 1 ? 's' : ''} found</p>
           <div className="rounded-xl overflow-hidden border border-surface-100">
             <table className="w-full text-xs">
-              <thead>
-                <tr className="bg-surface-50 text-surface-400">
-                  <th className="text-left px-3 py-2">Bank</th>
-                  <th className="text-left px-3 py-2">Type</th>
-                  <th className="text-right px-3 py-2">Balance</th>
-                  <th className="text-right px-3 py-2">Matures</th>
-                </tr>
-              </thead>
+              <thead><tr className="bg-surface-50 text-surface-400">
+                <th className="text-left px-3 py-2">Bank</th>
+                <th className="text-left px-3 py-2">Type</th>
+                <th className="text-right px-3 py-2">Balance</th>
+                <th className="text-right px-3 py-2">Matures</th>
+              </tr></thead>
               <tbody className="divide-y divide-surface-50">
                 {items.map(item => (
                   <tr key={item.key}>
                     <td className="px-3 py-2.5 font-medium text-surface-700">{item.bank} <span className="text-surface-400 font-mono font-normal">····{item.accountSuffix}</span></td>
                     <td className={`px-3 py-2.5 font-semibold ${item.typeColor}`}>{item.typeLabel}</td>
                     <td className="px-3 py-2.5 text-right font-mono font-semibold">{fmtINR(item.balance)}</td>
-                    <td className="px-3 py-2.5 text-right text-surface-400">
-                      {item.maturityDate ? new Date(item.maturityDate).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }) : '—'}
-                    </td>
+                    <td className="px-3 py-2.5 text-right text-surface-400">{item.maturityDate ? new Date(item.maturityDate).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }) : '—'}</td>
                   </tr>
                 ))}
                 <tr className="bg-surface-50 font-semibold">
@@ -815,38 +872,14 @@ function BankStatementContent() {
           </div>
           {errs.map((e, i) => <p key={i} className="text-[11px] text-rose-500">⚠ {e}</p>)}
           {imported
-            ? <div className="flex items-center gap-2 text-xs font-semibold text-emerald-700 bg-emerald-50 px-3 py-2.5 rounded-xl"><CheckCircle size={13} /> Imported successfully</div>
+            ? <div className="flex items-center gap-2 text-xs font-semibold text-emerald-700 bg-emerald-50 px-3 py-2.5 rounded-xl"><CheckCircle size={13} /> Imported</div>
             : <div className="flex gap-3">
-                <button onClick={() => { setItems([]); setErrs([]) }} className="btn-ghost text-xs flex items-center gap-1.5"><RefreshCw size={12} /> Different files</button>
+                <button onClick={() => setItems([])} className="btn-ghost text-xs flex items-center gap-1.5"><RefreshCw size={12} /> Different file</button>
                 <button onClick={doImport} className="btn-primary flex-1 flex items-center justify-center gap-2"><CheckCircle size={14} /> Import {items.length} account{items.length !== 1 ? 's' : ''}</button>
               </div>
           }
         </div>
       )}
-
-      {!parsing && errs.length > 0 && items.length === 0 && (
-        <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 flex flex-col gap-1">
-          {errs.map((e, i) => <p key={i} className="text-xs text-rose-600">⚠ {e}</p>)}
-          <button onClick={() => setErrs([])} className="text-xs text-rose-600 underline mt-1">Try again</button>
-        </div>
-      )}
-
-      <div className="border-t border-surface-100 pt-4">
-        <p className="text-xs font-semibold text-surface-500 mb-3">Or add savings manually</p>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-xs font-semibold text-surface-400 uppercase tracking-widest block mb-1.5">Bank Name</label>
-            <input className="input-field" placeholder="e.g. HDFC Bank" value={manualBank} onChange={e => setManualBank(e.target.value)} />
-          </div>
-          <div>
-            <label className="text-xs font-semibold text-surface-400 uppercase tracking-widest block mb-1.5">Balance (₹)</label>
-            <input className="input-field" type="number" placeholder="e.g. 150000" value={manualBal} onChange={e => setManualBal(e.target.value)} />
-          </div>
-        </div>
-        <button onClick={saveManual} disabled={!manualBank || !manualBal} className="btn-primary mt-3 w-full disabled:opacity-40 flex items-center justify-center gap-2">
-          {manualSaved ? <><CheckCircle size={14} /> Saved!</> : 'Save savings account manually'}
-        </button>
-      </div>
     </div>
   )
 }
