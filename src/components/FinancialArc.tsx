@@ -235,15 +235,17 @@ export default function FinancialArc() {
   const projCur = curScenario ? projectLifetime(nwNow, settings, curScenario, goals) : []
   const projWi  = wiScenario  ? projectLifetime(nwNow, settings, wiScenario,  goals) : []
 
-  const fireAgeCur = useMemo(() => {
+  const fireYearCur = useMemo(() => {
     if (!curScenario) return null
     return computeFireYear(nwNow, settings, curScenario)
   }, [nwNow, settings, curScenario])
-  const fireAgeWi = useMemo(() => {
+  const fireYearWi = useMemo(() => {
     if (!wiActive || !wiScenario) return null
     return computeFireYear(nwNow, settings, wiScenario)
   }, [nwNow, settings, wiScenario, wiActive])
-  const yearsDelta = (fireAgeCur !== null && fireAgeWi !== null) ? fireAgeCur - fireAgeWi : null
+  const fireAgeCur  = fireYearCur !== null ? settings.currentAge + (fireYearCur - currentYear) : null
+  const fireAgeWi   = fireYearWi  !== null ? settings.currentAge + (fireYearWi  - currentYear) : null
+  const yearsDelta  = (fireYearCur !== null && fireYearWi !== null) ? fireYearCur - fireYearWi : null
 
   const currentMonth = new Date().toISOString().slice(0, 7)
   const pastRows     = useMemo(() => rows.filter(r => r.s.date <= currentMonth), [rows, currentMonth])
@@ -316,8 +318,8 @@ export default function FinancialArc() {
   const monthlySavingsTotal = (baseAssump?.monthlyIncome ?? 0) > 0
     ? (baseAssump!.monthlyIncome - (settings.monthlyExpenses ?? 0)) + (settings.existingSIP ?? baseAssump?.extraMonthlySavings ?? 0)
     : (settings.existingSIP ?? baseAssump?.extraMonthlySavings ?? 0)
-  const corpusAtFire = fireAgeCur !== null
-    ? (projCur.find(p => p.age === fireAgeCur)?.value ?? 0)
+  const corpusAtFire = fireYearCur !== null
+    ? (projCur.find(p => p.year === fireYearCur)?.value ?? 0)
     : 0
   const withdrawalPerMonth = corpusAtFire * (settings.safeWithdrawalRate / 100) / 12
 
