@@ -383,7 +383,7 @@ export async function parseCanaraFile(file: File): Promise<CanaraParseResult> {
       if (/Current\s*&?\s*Saving\s*Account\s*Statement/i.test(text)) {
         return parseSavingsPDF(text, file.name)
       }
-      return { status: 'error', message: `Unrecognised PDF format in ${file.name}`, accounts: [] }
+      return { status: 'error', message: `Unrecognised PDF — extracted: "${text.slice(0, 120).replace(/\n/g,'↵')}"`, accounts: [] }
     }
 
     return { status: 'error', message: `Unsupported file type: ${file.name}`, accounts: [] }
