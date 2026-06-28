@@ -649,8 +649,8 @@ interface BankItem {
 
 function canaraToItems(r: CanaraParseResult): BankItem[] {
   return r.accounts.map(acc => ({
-    key:           `CANARA_${acc.accountNumber}`,
-    bank:          'Canara Bank',
+    key:           `${acc.bankCode ?? 'CANARA'}_${acc.accountNumber}`,
+    bank:          acc.bank ?? 'Canara Bank',
     typeLabel:     acc.accountType === 'savings' ? 'Savings' : acc.accountType === 'fd' ? 'Fixed Deposit' : 'PPF',
     typeColor:     acc.accountType === 'savings' ? 'text-emerald-700' : acc.accountType === 'fd' ? 'text-blue-700' : 'text-indigo-700',
     accountSuffix: acc.accountNumber.slice(-4),

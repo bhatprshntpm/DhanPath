@@ -11,6 +11,8 @@ export type CanaraAccountType = 'savings' | 'fd' | 'ppf'
 export interface CanaraAccount {
   accountNumber: string
   accountType:   CanaraAccountType
+  bank?:         string
+  bankCode?:     string
   scheme?:       string
   balance:       number
   maturityDate?: string
@@ -281,7 +283,38 @@ function parseFDReceiptPDF(text: string, filename: string): CanaraParseResult {
   }
 }
 
-// ── main dispatcher ──────────────────────────────────────────────────────────
+// ── Kotak Balance Certificate parser ────────────────────────────────────────
+
+function parseKotakBalancePDF(text: string, filename: string): CanaraParseResult {
+  const accounts: CanaraAccount[] = []
+
+  // Each row: BRANCHNAME  ACCTNO  INR  (SAVING|TERM DEPOSIT)  CR  BALANCE
+  const rowRe = /[A-Z]+\s+(\d{8,12})\s+INR\s+(SAVING|TERM\s+DEPOSIT)\s+CR\s+([\d.]+)/gi
+  let m: RegExpExecArray | null
+  while ((m = rowRe.exec(text)) !== null) {
+    const accountNumber = m[1]
+    const accountType   = /saving/i.test(m[2]) ? 'savings' : 'fd'
+    const balance       = parseFloat(m[3])
+    if (balance > 0) {
+      accounts.push({
+        accountNumber,
+        accountType: accountType as CanaraAccountType,
+        bank:        'Kotak Bank',
+        bankCode:    'KOTAK',
+        balance,
+        isActive:    true,
+        sourceFile:  filename,
+      })
+    }
+  }
+
+  if (accounts.length === 0) {
+    return { status: 'error', message: 'No accounts found in Kotak balance certificate', accounts: [] }
+  }
+  return { status: 'success', message: `${accounts.length} Kotak accounts parsed`, accounts }
+}
+
+
 
 export async function parseCanaraFile(file: File): Promise<CanaraParseResult> {
   const name = file.name.toLowerCase()
@@ -300,6 +333,9 @@ export async function parseCanaraFile(file: File): Promise<CanaraParseResult> {
 
     if (name.endsWith('.pdf')) {
       const text = await extractPDFText(file)
+      if (/kotak/i.test(text) && /balance\s*certificate/i.test(text)) {
+        return parseKotakBalancePDF(text, file.name)
+      }
       if (/PPF\s*Statement/i.test(text)) {
         return parsePPFPDF(text, file.name)
       }
@@ -321,12 +357,14 @@ export async function parseCanaraFile(file: File): Promise<CanaraParseResult> {
 // ── convert to Holdings ──────────────────────────────────────────────────────
 
 export function canaraAccountToHolding(acc: CanaraAccount): Omit<Holding, 'id'> {
+  const bankCode = acc.bankCode ?? 'CANARA'
+  const bankName = acc.bank ?? 'Canara Bank'
   const today = new Date().toISOString().slice(0, 10)
 
   if (acc.accountType === 'savings') {
     return {
-      name:            `Canara Bank Savings (${acc.accountNumber.slice(-4)})`,
-      ticker:          `CANARA_SB_${acc.accountNumber.replace(/\s/g, '')}`,
+      name:            `${bankName} Savings (${acc.accountNumber.slice(-4)})`,
+      ticker:          `${bankCode}_SB_${acc.accountNumber.replace(/\s/g, '')}`,
       type:            'cash',
       assetClass:      'Cash & Savings',
       subType:         'Savings',
@@ -341,8 +379,8 @@ export function canaraAccountToHolding(acc: CanaraAccount): Omit<Holding, 'id'> 
 
   if (acc.accountType === 'ppf') {
     return {
-      name:            `Canara Bank PPF (${acc.accountNumber})`,
-      ticker:          `CANARA_PPF_${acc.accountNumber}`,
+      name:            `${bankName} PPF (${acc.accountNumber})`,
+      ticker:          `${bankCode}_PPF_${acc.accountNumber}`,
       type:            'retirement',
       assetClass:      'EPF / NPS / PPF',
       subType:         'PPF',
@@ -360,8 +398,8 @@ export function canaraAccountToHolding(acc: CanaraAccount): Omit<Holding, 'id'> 
     ? ` · ${acc.scheme.replace(/CANARA\s*/i, '').replace(/KDR|FDR/i, '').trim().slice(0, 20)}`
     : ''
   return {
-    name:            `Canara FD ${acc.accountNumber.slice(-6)}${schemeShort}`,
-    ticker:          `CANARA_FD_${acc.accountNumber.replace(/[\s-]/g, '')}`,
+    name:            `${bankName} FD ${acc.accountNumber.slice(-6)}${schemeShort}`,
+    ticker:          `${bankCode}_FD_${acc.accountNumber.replace(/[\s-]/g, '')}`,
     type:            'bond',
     assetClass:      'Debt',
     subType:         'Fixed Deposit',
