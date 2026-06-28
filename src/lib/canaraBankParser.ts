@@ -368,10 +368,10 @@ export async function parseCanaraFile(file: File): Promise<CanaraParseResult> {
       if (/balance\s*certificate/i.test(text) && /CRN\s*:/i.test(text) && /(SAVING|TERM\s+DEPOSIT)\s+CR/i.test(text)) {
         return parseKotakBalancePDF(text, file.name)
       }
-      if (/Balance confirmation certificate/i.test(text) && /SAVING Account INR/i.test(text)) {
+      if (/Balance confirmation certificate/i.test(text) || /SAVING Account INR/i.test(text)) {
         return parseHDFCBalancePDF(text, file.name)
       }
-      if (/Fixed\s+Deposit\s+Summary/i.test(text) && /Principal\s*\n?\s*Amount/i.test(text)) {
+      if (/Fixed\s+Deposit\s+Summary/i.test(text) || /Deposit\s+Start\s+Date/i.test(text)) {
         return parseHDFCFDSummaryPDF(text, file.name)
       }
       if (/PPF\s*Statement/i.test(text)) {
@@ -383,7 +383,7 @@ export async function parseCanaraFile(file: File): Promise<CanaraParseResult> {
       if (/Current\s*&?\s*Saving\s*Account\s*Statement/i.test(text)) {
         return parseSavingsPDF(text, file.name)
       }
-      return { status: 'error', message: `Unrecognised PDF — extracted: "${text.slice(0, 120).replace(/\n/g,'↵')}"`, accounts: [] }
+      return { status: 'error', message: `Unrecognised PDF — extracted: "${text.slice(0, 400).replace(/\n/g,'↵')}"`, accounts: [] }
     }
 
     return { status: 'error', message: `Unsupported file type: ${file.name}`, accounts: [] }
