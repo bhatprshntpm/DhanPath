@@ -371,7 +371,7 @@ export async function parseCanaraFile(file: File): Promise<CanaraParseResult> {
       if (/Balance confirmation certificate/i.test(text) && /SAVING Account INR/i.test(text)) {
         return parseHDFCBalancePDF(text, file.name)
       }
-      if (/Fixed Deposit Summary/i.test(text) && /HDFC/i.test(text)) {
+      if (/Fixed\s+Deposit\s+Summary/i.test(text) && /Principal\s*\n?\s*Amount/i.test(text)) {
         return parseHDFCFDSummaryPDF(text, file.name)
       }
       if (/PPF\s*Statement/i.test(text)) {
