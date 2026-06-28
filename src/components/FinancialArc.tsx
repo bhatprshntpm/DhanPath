@@ -178,8 +178,9 @@ export default function FinancialArc({ onOpenSettings }: { onOpenSettings?: () =
   const { data } = useApp()
   const { snapshots, scenarios, settings, goals } = data
   const [view,      setView]      = useState<ViewMode>('10yr')
-  const [showTable, setShowTable] = useState(false)
-  const [hoverYear, setHoverYear] = useState<number | null>(null)
+  const [showTable,       setShowTable]       = useState(false)
+  const [hoverYear,        setHoverYear]        = useState<number | null>(null)
+  const [showAssumptions,  setShowAssumptions]  = useState(false)
 
   const currentYear  = new Date().getFullYear()
   const baseline     = scenarios.find(s => s.enabled && s.id === 'baseline') ?? scenarios.find(s => s.enabled)
@@ -363,32 +364,42 @@ export default function FinancialArc({ onOpenSettings }: { onOpenSettings?: () =
             <p className="text-xs text-surface-300 mt-0.5">{fmtINR(nwNow)} today</p>
           )}
 
-          {/* Assumptions — always visible when FIRE age is computed */}
+          {/* Assumptions — collapsed by default */}
           {fireAgeCur && (() => {
             const yearsToRetire = fireAgeCur - settings.currentAge
             const inflatedExpenses = Math.round((settings.monthlyExpenses ?? 0) * Math.pow(1 + (settings.inflationRate ?? 6) / 100, Math.max(yearsToRetire, 0)))
             return (
-              <div className="mt-2 p-3 bg-amber-50/60 rounded-xl border border-amber-100/80 text-[11px] flex flex-col gap-1.5">
-                <div className="flex items-center justify-between mb-0.5">
-                  <span className="text-[10px] font-semibold uppercase tracking-widest text-amber-600">Assumptions</span>
-                  {onOpenSettings && (
-                    <button onClick={onOpenSettings} className="text-[10px] text-amber-600 hover:text-amber-800 underline underline-offset-2 transition-colors">
-                      Edit
-                    </button>
-                  )}
-                </div>
-                <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
-                  <span className="text-surface-400">Corpus at FIRE</span>
-                  <span className="font-semibold text-surface-800">{fmtINR(corpusAtFire)} <span className="font-normal text-surface-400">— enough to last to age {settings.lifeExpectancy}</span></span>
-                  <span className="text-surface-400">Monthly spend at retirement</span>
-                  <span className="font-semibold">{fmtINR(inflatedExpenses)}/mo <span className="font-normal text-surface-400">(today's ₹{fmtINR(settings.monthlyExpenses ?? 0)} × {yearsToRetire > 0 ? `${settings.inflationRate ?? 6}% inflation for ${yearsToRetire} yrs` : 'already at retirement age'})</span></span>
-                  <span className="text-surface-400">In retirement</span>
-                  <span className="font-semibold text-surface-700">No salary, no SIP — corpus grows at {blendedRet}%, withdrawals grow at {settings.inflationRate ?? 6}%/yr</span>
-                  <span className="text-surface-400">Savings used</span>
-                  <span className="font-semibold">{fmtINR(Math.max(monthlySavingsTotal, 0))}/mo <span className="font-normal text-surface-400">(income surplus + SIP — both stop at FIRE)</span></span>
-                </div>
-                {(settings.monthlyExpenses ?? 0) === 60000 && (
-                  <p className="text-amber-700 border-t border-amber-200 pt-1.5">⚠ Monthly expenses look like the default (₹60k). Update in Settings for accurate results.</p>
+              <div className="mt-1.5">
+                <button
+                  onClick={() => setShowAssumptions(v => !v)}
+                  className="flex items-center gap-1 text-[10px] text-surface-400 hover:text-amber-600 transition-colors">
+                  <ChevronRight size={10} className={`transition-transform ${showAssumptions ? 'rotate-90' : ''}`} />
+                  Assumptions {showAssumptions ? '' : `· ${fmtINR(corpusAtFire)} corpus · ${settings.inflationRate ?? 6}% inflation`}
+                </button>
+                {showAssumptions && (
+                  <div className="mt-2 p-3 bg-amber-50/60 rounded-xl border border-amber-100/80 text-[11px] flex flex-col gap-1.5">
+                    <div className="flex items-center justify-between mb-0.5">
+                      <span className="text-[10px] font-semibold uppercase tracking-widest text-amber-600">Assumptions</span>
+                      {onOpenSettings && (
+                        <button onClick={onOpenSettings} className="text-[10px] text-amber-600 hover:text-amber-800 underline underline-offset-2 transition-colors">
+                          Edit
+                        </button>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
+                      <span className="text-surface-400">Corpus at FIRE</span>
+                      <span className="font-semibold text-surface-800">{fmtINR(corpusAtFire)} <span className="font-normal text-surface-400">— enough to last to age {settings.lifeExpectancy}</span></span>
+                      <span className="text-surface-400">Monthly spend at retirement</span>
+                      <span className="font-semibold">{fmtINR(inflatedExpenses)}/mo <span className="font-normal text-surface-400">(today’s {fmtINR(settings.monthlyExpenses ?? 0)} × {yearsToRetire > 0 ? `${settings.inflationRate ?? 6}% inflation for ${yearsToRetire} yrs` : 'already at retirement age'})</span></span>
+                      <span className="text-surface-400">In retirement</span>
+                      <span className="font-semibold text-surface-700">No salary, no SIP — corpus grows at {blendedRet}%, withdrawals grow at {settings.inflationRate ?? 6}%/yr</span>
+                      <span className="text-surface-400">Savings used</span>
+                      <span className="font-semibold">{fmtINR(Math.max(monthlySavingsTotal, 0))}/mo <span className="font-normal text-surface-400">(income surplus + SIP — both stop at FIRE)</span></span>
+                    </div>
+                    {(settings.monthlyExpenses ?? 0) === 60000 && (
+                      <p className="text-amber-700 border-t border-amber-200 pt-1.5">⚠ Monthly expenses look like the default (₹60k). Update in Settings for accurate results.</p>
+                    )}
+                  </div>
                 )}
               </div>
             )
