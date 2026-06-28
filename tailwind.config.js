@@ -34,6 +34,7 @@ export default {
       animation: {
         'draw-in': 'drawIn 1.2s ease-out forwards',
         'fade-up': 'fadeUp 0.4s ease-out forwards',
+        'slide-in-right': 'slideInRight 0.25s ease-out forwards',
       },
       keyframes: {
         drawIn: {
@@ -43,6 +44,10 @@ export default {
         fadeUp: {
           from: { opacity: '0', transform: 'translateY(12px)' },
           to:   { opacity: '1', transform: 'translateY(0)' },
+        },
+        slideInRight: {
+          from: { transform: 'translateX(100%)' },
+          to:   { transform: 'translateX(0)' },
         },
       },
     },

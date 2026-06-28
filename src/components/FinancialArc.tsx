@@ -174,7 +174,7 @@ function Slider({ label, value, min, max, step, prefix, suffix, onChange }: {
 // ─── fire year from projection ────────────────────────────────────────────────
 
 // ─── main ────────────────────────────────────────────────────────────────────
-export default function FinancialArc() {
+export default function FinancialArc({ onOpenSettings }: { onOpenSettings?: () => void } = {}) {
   const { data } = useApp()
   const { snapshots, scenarios, settings, goals } = data
   const [view,      setView]      = useState<ViewMode>('10yr')
@@ -345,6 +345,14 @@ export default function FinancialArc() {
             const inflatedExpenses = Math.round((settings.monthlyExpenses ?? 0) * Math.pow(1 + (settings.inflationRate ?? 6) / 100, Math.max(yearsToRetire, 0)))
             return (
               <div className="mt-2 p-3 bg-amber-50/60 rounded-xl border border-amber-100/80 text-[11px] flex flex-col gap-1.5">
+                <div className="flex items-center justify-between mb-0.5">
+                  <span className="text-[10px] font-semibold uppercase tracking-widest text-amber-600">Assumptions</span>
+                  {onOpenSettings && (
+                    <button onClick={onOpenSettings} className="text-[10px] text-amber-600 hover:text-amber-800 underline underline-offset-2 transition-colors">
+                      Edit
+                    </button>
+                  )}
+                </div>
                 <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
                   <span className="text-surface-400">Corpus at FIRE</span>
                   <span className="font-semibold text-surface-800">{fmtINR(corpusAtFire)} <span className="font-normal text-surface-400">— enough to last to age {settings.lifeExpectancy}</span></span>

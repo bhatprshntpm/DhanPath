@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { AppProvider, useApp } from './context/AppContext'
 import Header from './components/Header'
 import OnboardingWizard from './components/OnboardingWizard'
+import PlanSettings from './components/PlanSettings'
 import DemoBanner from './components/DemoBanner'
 import VitalsBar from './components/VitalsBar'
 import FinancialArc from './components/FinancialArc'
@@ -14,7 +15,8 @@ import { ONBOARD_KEY, isDemoMode } from './lib/demoData'
 import { DEFAULT_DATA } from './lib/storage'
 
 function AppContent() {
-  const [wizardOpen, setWizardOpen] = useState(false)
+  const [wizardOpen,    setWizardOpen]    = useState(false)
+  const [settingsOpen,  setSettingsOpen]  = useState(false)
   const [demoMode,   setDemoMode_]  = useState(() => isDemoMode())
   const { loading, replaceData }    = useApp()
 
@@ -35,7 +37,8 @@ function AppContent() {
   return (
     <div className="min-h-screen bg-surface-50">
       <OnboardingWizard forceOpen={wizardOpen} onClose={() => { setWizardOpen(false); setDemoMode_(false) }} />
-      <Header onEditProfile={() => setWizardOpen(true)} />
+      <PlanSettings open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <Header onEditProfile={() => setSettingsOpen(true)} />
       {demoMode && <DemoBanner onUseMyData={handleUseMyData} />}
 
       <main className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-6 sm:py-10 flex flex-col gap-6 sm:gap-8">
@@ -44,7 +47,7 @@ function AppContent() {
         <VitalsBar />
 
         {/* THE MAIN STORY — arc is hero */}
-        <FinancialArc />
+        <FinancialArc onOpenSettings={() => setSettingsOpen(true)} />
 
         {/* Goals — the "why" behind the arc */}
         <GoalsCard />

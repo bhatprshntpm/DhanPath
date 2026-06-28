@@ -76,8 +76,8 @@ export default function Header({ onEditProfile }: HeaderProps) {
               onChange={e => updateSettings({ name: e.target.value })} />
 
             <button onClick={onEditProfile}
-              className="btn-ghost flex items-center gap-1.5 text-xs" title="Edit profile">
-              <UserCog size={14}/> <span className="hidden sm:inline">Edit Profile</span>
+              className="btn-ghost flex items-center gap-1.5 text-xs" title="Plan settings">
+              <UserCog size={14}/> <span className="hidden sm:inline">Settings</span>
             </button>
 
             <button onClick={() => setShowExport(v => !v)}
