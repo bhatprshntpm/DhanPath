@@ -7,7 +7,7 @@ import {
 import { ChevronDown, ChevronRight, RotateCcw, Zap } from 'lucide-react'
 import { useApp } from '../context/AppContext'
 import {
-  projectLifetime, computeFireYear,
+  projectLifetime, trueFireAge,
   fmtINR, totalAssets, totalLiabilities,
 } from '../lib/calc'
 
@@ -237,12 +237,14 @@ export default function FinancialArc() {
 
   const fireYearCur = useMemo(() => {
     if (!curScenario) return null
-    return computeFireYear(nwNow, settings, curScenario)
-  }, [nwNow, settings, curScenario])
+    const age = trueFireAge(nwNow, settings, curScenario, goals.filter(g => g.enabled))
+    return age !== null ? new Date().getFullYear() + (age - settings.currentAge) : null
+  }, [nwNow, settings, curScenario, goals])
   const fireYearWi = useMemo(() => {
     if (!wiActive || !wiScenario) return null
-    return computeFireYear(nwNow, settings, wiScenario)
-  }, [nwNow, settings, wiScenario, wiActive])
+    const age = trueFireAge(nwNow, settings, wiScenario, goals.filter(g => g.enabled))
+    return age !== null ? new Date().getFullYear() + (age - settings.currentAge) : null
+  }, [nwNow, settings, wiScenario, wiActive, goals])
   const fireAgeCur  = fireYearCur !== null ? settings.currentAge + (fireYearCur - currentYear) : null
   const fireAgeWi   = fireYearWi  !== null ? settings.currentAge + (fireYearWi  - currentYear) : null
   const yearsDelta  = (fireYearCur !== null && fireYearWi !== null) ? fireYearCur - fireYearWi : null
@@ -320,7 +322,6 @@ export default function FinancialArc() {
   const corpusAtFire = fireYearCur !== null
     ? (projCur.find(p => p.year === fireYearCur)?.value ?? 0)
     : 0
-  const withdrawalPerMonth = corpusAtFire * (settings.safeWithdrawalRate / 100) / 12
 
 
   return (
@@ -331,31 +332,35 @@ export default function FinancialArc() {
           <p className="section-title">Financial Arc</p>
           <p className="text-xs text-surface-300 mt-0.5">
             {fmtINR(nwNow)} today
-            {fireAgeCur && <span> · FIRE age <span className="text-amber-600 font-semibold">{fireAgeCur}</span></span>}
             {wiDiffers && fireAgeWi && yearsDelta !== null && (
               <span className={`ml-2 font-semibold ${yearsDelta > 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
-                → what-if age {fireAgeWi} ({yearsDelta > 0 ? `${yearsDelta} yrs earlier` : `${Math.abs(yearsDelta)} yrs later`})
+                → what-if FIRE at age {fireAgeWi} ({yearsDelta > 0 ? `${yearsDelta} yrs earlier` : `${Math.abs(yearsDelta)} yrs later`})
               </span>
             )}
           </p>
 
           {/* Assumptions — always visible when FIRE age is computed */}
-          {fireAgeCur && (
-            <div className="mt-2 p-3 bg-amber-50/60 rounded-xl border border-amber-100/80 text-[11px] flex flex-col gap-1.5">
-              <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
-                <span className="text-surface-400">Corpus needed</span>
-                <span className="font-semibold text-surface-800">{fmtINR(corpusAtFire)} <span className="font-normal text-surface-400">to fund life to age {settings.lifeExpectancy}</span></span>
-                <span className="text-surface-400">Monthly expenses</span>
-                <span className="font-semibold">{fmtINR(settings.monthlyExpenses ?? 0)}/mo{(settings.monthlyExpenses ?? 0) === 60000 ? <span className="text-amber-600 font-normal"> · looks like the default — check Settings</span> : null}</span>
-                <span className="text-surface-400">Monthly savings</span>
-                <span className="font-semibold">{fmtINR(Math.max(monthlySavingsTotal, 0))}/mo <span className="font-normal text-surface-400">income surplus + SIP · stops at retirement</span></span>
-                <span className="text-surface-400">Return / inflation</span>
-                <span className="font-semibold">{blendedRet}% blended · {settings.inflationRate ?? 6}% inflation</span>
-                <span className="text-surface-400">At FIRE age</span>
-                <span className="font-semibold">{fmtINR(Math.round(withdrawalPerMonth))}/mo <span className="font-normal text-surface-400">withdrawable at {settings.safeWithdrawalRate ?? 4}% SWR · portfolio-only, no salary</span></span>
+          {fireAgeCur && (() => {
+            const yearsToRetire = fireAgeCur - settings.currentAge
+            const inflatedExpenses = Math.round((settings.monthlyExpenses ?? 0) * Math.pow(1 + (settings.inflationRate ?? 6) / 100, Math.max(yearsToRetire, 0)))
+            return (
+              <div className="mt-2 p-3 bg-amber-50/60 rounded-xl border border-amber-100/80 text-[11px] flex flex-col gap-1.5">
+                <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
+                  <span className="text-surface-400">Corpus at FIRE</span>
+                  <span className="font-semibold text-surface-800">{fmtINR(corpusAtFire)} <span className="font-normal text-surface-400">— enough to last to age {settings.lifeExpectancy}</span></span>
+                  <span className="text-surface-400">Monthly spend at retirement</span>
+                  <span className="font-semibold">{fmtINR(inflatedExpenses)}/mo <span className="font-normal text-surface-400">(today's ₹{fmtINR(settings.monthlyExpenses ?? 0)} × {yearsToRetire > 0 ? `${settings.inflationRate ?? 6}% inflation for ${yearsToRetire} yrs` : 'already at retirement age'})</span></span>
+                  <span className="text-surface-400">In retirement</span>
+                  <span className="font-semibold text-surface-700">No salary, no SIP — corpus grows at {blendedRet}%, withdrawals grow at {settings.inflationRate ?? 6}%/yr</span>
+                  <span className="text-surface-400">Savings used</span>
+                  <span className="font-semibold">{fmtINR(Math.max(monthlySavingsTotal, 0))}/mo <span className="font-normal text-surface-400">(income surplus + SIP — both stop at FIRE)</span></span>
+                </div>
+                {(settings.monthlyExpenses ?? 0) === 60000 && (
+                  <p className="text-amber-700 border-t border-amber-200 pt-1.5">⚠ Monthly expenses look like the default (₹60k). Update in Settings for accurate results.</p>
+                )}
               </div>
-            </div>
-          )}
+            )
+          })()}
         </div>
         <div className="flex items-center bg-surface-100 rounded-lg p-0.5 gap-0.5">
           {(['5yr', '10yr', 'lifetime'] as ViewMode[]).map(v => (
