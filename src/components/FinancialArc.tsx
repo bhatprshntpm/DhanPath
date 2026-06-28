@@ -179,6 +179,7 @@ export default function FinancialArc({ onOpenSettings }: { onOpenSettings?: () =
   const { snapshots, scenarios, settings, goals } = data
   const [view,      setView]      = useState<ViewMode>('10yr')
   const [showTable, setShowTable] = useState(false)
+  const [hoverYear, setHoverYear] = useState<number | null>(null)
 
   const currentYear  = new Date().getFullYear()
   const baseline     = scenarios.find(s => s.enabled && s.id === 'baseline') ?? scenarios.find(s => s.enabled)
@@ -275,7 +276,9 @@ export default function FinancialArc({ onOpenSettings }: { onOpenSettings?: () =
     projCur.forEach(p => {
       const pt = yearMap.get(p.year)
       if (pt && p.year >= currentYear) {
-        pt.current = p.value
+        pt.current  = p.value
+        pt.netFlow  = p.netFlow
+        pt.phase    = p.phase
         if (p.phase === 'accumulation' || p.year === retireYear) pt.accumulation = p.value
         if (p.phase === 'drawdown'     || p.year === retireYear) pt.drawdown     = p.value
       }
@@ -323,6 +326,24 @@ export default function FinancialArc({ onOpenSettings }: { onOpenSettings?: () =
     ? (projCur.find(p => p.year === fireYearCur)?.value ?? 0)
     : 0
 
+  // Hover point
+  const hoverPoint   = hoverYear !== null ? projCur.find(p => p.year === hoverYear) ?? null : null
+  const hoverPrev    = hoverYear !== null ? projCur.find(p => p.year === hoverYear - 1) ?? null : null
+  const hoverReturns = (hoverPoint && hoverPrev)
+    ? Math.round(hoverPoint.value - hoverPrev.value - hoverPoint.netFlow * 12)
+    : null
+
+  // Plain-English summary
+  const fireSummary = (() => {
+    if (!fireAgeCur) return null
+    const yearsAway = fireAgeCur - settings.currentAge
+    const inf = (settings.inflationRate ?? 6) / 100
+    const monthlyNow = settings.monthlyExpenses ?? 0
+    const monthlyAtRetire = Math.round(monthlyNow * Math.pow(1 + inf, Math.max(yearsAway, 0)))
+    const corpus = fmtINR(corpusAtFire)
+    if (yearsAway <= 0) return `You've reached Financial Independence. Your ${corpus} corpus funds ${fmtINR(monthlyAtRetire)}/mo until age ${settings.lifeExpectancy}.`
+    return `Retire at age ${fireAgeCur} (${yearsAway} yr${yearsAway !== 1 ? 's' : ''} away) with ${corpus}. Your ${fmtINR(monthlyNow)}/mo expenses grow to ${fmtINR(monthlyAtRetire)}/mo by retirement — corpus sustains until age ${settings.lifeExpectancy}.`
+  })()
 
   return (
     <div className="card p-5 flex flex-col gap-4">
@@ -330,14 +351,17 @@ export default function FinancialArc({ onOpenSettings }: { onOpenSettings?: () =
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
           <p className="section-title">Financial Arc</p>
-          <p className="text-xs text-surface-300 mt-0.5">
-            {fmtINR(nwNow)} today
-            {wiDiffers && fireAgeWi && yearsDelta !== null && (
-              <span className={`ml-2 font-semibold ${yearsDelta > 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
-                → what-if FIRE at age {fireAgeWi} ({yearsDelta > 0 ? `${yearsDelta} yrs earlier` : `${Math.abs(yearsDelta)} yrs later`})
-              </span>
-            )}
-          </p>
+          {fireSummary ? (
+            <p className="text-xs text-surface-500 mt-0.5 leading-relaxed max-w-lg">{fireSummary}
+              {wiDiffers && fireAgeWi && yearsDelta !== null && (
+                <span className={`ml-1.5 font-semibold ${yearsDelta > 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
+                  {' '}What-if: FIRE at {fireAgeWi} ({yearsDelta > 0 ? `${yearsDelta} yrs earlier` : `${Math.abs(yearsDelta)} yrs later`})
+                </span>
+              )}
+            </p>
+          ) : (
+            <p className="text-xs text-surface-300 mt-0.5">{fmtINR(nwNow)} today</p>
+          )}
 
           {/* Assumptions — always visible when FIRE age is computed */}
           {fireAgeCur && (() => {
@@ -381,9 +405,40 @@ export default function FinancialArc({ onOpenSettings }: { onOpenSettings?: () =
         </div>
       </div>
 
+      {/* Hover card */}
+      {hoverPoint ? (
+        <div className={`flex flex-wrap items-center gap-x-5 gap-y-1.5 px-4 py-3 rounded-xl text-xs font-medium
+          ${hoverPoint.phase === 'drawdown' ? 'bg-amber-50 border border-amber-200' : 'bg-emerald-50 border border-emerald-200'}`}>
+          <div>
+            <p className="text-[10px] uppercase tracking-widest text-surface-400">Portfolio at age {hoverPoint.age}</p>
+            <p className="text-lg font-bold text-surface-900 leading-tight">{fmtINR(hoverPoint.value)}</p>
+          </div>
+          {hoverReturns !== null && (
+            <div>
+              <p className="text-[10px] text-surface-400">Returns this yr</p>
+              <p className={`font-semibold ${hoverReturns >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{hoverReturns >= 0 ? '+' : ''}{fmtINR(hoverReturns)}</p>
+            </div>
+          )}
+          <div>
+            <p className="text-[10px] text-surface-400">{hoverPoint.phase === 'drawdown' ? 'Monthly spend' : 'Monthly surplus'}</p>
+            <p className={`font-semibold ${(hoverPoint.netFlow ?? 0) >= 0 ? 'text-emerald-600' : 'text-amber-600'}`}>
+              {(hoverPoint.netFlow ?? 0) >= 0 ? '+' : ''}{fmtINR(hoverPoint.netFlow ?? 0)}/mo
+            </p>
+          </div>
+          <span className={`ml-auto text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-lg
+            ${hoverPoint.phase === 'drawdown' ? 'bg-amber-200 text-amber-800' : 'bg-emerald-200 text-emerald-800'}`}>
+            {hoverPoint.phase}
+          </span>
+        </div>
+      ) : (
+        <p className="text-[10px] text-surface-300 text-center select-none">Hover the chart to explore your wealth at any age</p>
+      )}
+
       {/* Chart */}
       <ResponsiveContainer width="100%" height={300}>
-        <ComposedChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+        <ComposedChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
+          onMouseMove={(s: any) => { if (s?.activePayload?.[0]) setHoverYear(s.activePayload[0].payload.year) }}
+          onMouseLeave={() => setHoverYear(null)}>
           <defs>
             <linearGradient id="gradAccumulation" x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%" stopColor="#10b981" stopOpacity={0.25} />
@@ -414,6 +469,9 @@ export default function FinancialArc({ onOpenSettings }: { onOpenSettings?: () =
             <ReferenceLine key={g.id} x={yr} stroke="transparent"
               label={{ value: g.emoji, position: 'insideTop', fontSize: 16, offset: -4 }} />
           ))}
+          {hoverYear !== null && (
+            <ReferenceLine x={hoverYear} stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="3 3" />
+          )}
           {/* Actual history — amber */}
           <Area dataKey="actual" name="Actual" fill="url(#gradActual)" stroke="#f59e0b" strokeWidth={2.5} dot={false} connectNulls />
           {/* Accumulation phase — green */}
