@@ -605,7 +605,7 @@ function BankStatementContent() {
   const [manualBal,  setManualBal]  = useState('')
   const [manualSaved,setManualSaved]= useState(false)
 
-  const bankHoldings = data.holdings.filter(h => h.subType === 'Savings' || h.ticker?.startsWith('CANARA_'))
+  const bankHoldings = data.holdings.filter(h => h.subType === 'Savings' || (h.ticker?.startsWith('CANARA_') && h.subType !== 'PPF'))
 
   async function handleFiles(fileList: FileList | File[]) {
     setParsing(true); setItems([]); setErrs([]); setImported(false)
@@ -957,7 +957,7 @@ export default function DataManagement() {
   const epfHoldings    = data.holdings.filter(h => h.subType === 'EPF')
   const ppfHoldings    = data.holdings.filter(h => ['PPF','NPS','VPF','Gratuity','Pension'].includes(h.subType ?? ''))
   const cryptoCount    = data.holdings.filter(h => h.type === 'crypto').length
-  const bankHoldings   = data.holdings.filter(h => h.subType === 'Savings' || h.ticker?.startsWith('CANARA_'))
+  const bankHoldings   = data.holdings.filter(h => h.subType === 'Savings' || (h.ticker?.startsWith('CANARA_') && h.subType !== 'PPF'))
   const fdHoldingsMain = data.holdings.filter(h => h.subType === 'Fixed Deposit')
 
   function handleResetAll() {
@@ -1029,7 +1029,7 @@ export default function DataManagement() {
             statusLabel={bankHoldings.length > 0
               ? `${bankHoldings.length} account${bankHoldings.length > 1 ? 's' : ''} · ${fmtINR(bankHoldings.reduce((s, h) => s + h.value, 0))}`
               : 'Not imported — drop any bank statement'}
-            onClear={bankHoldings.length > 0 ? () => replaceData({ ...data, holdings: data.holdings.filter(h => h.subType !== 'Savings' && !h.ticker?.startsWith('CANARA_')) }) : undefined}>
+            onClear={bankHoldings.length > 0 ? () => replaceData({ ...data, holdings: data.holdings.filter(h => h.subType !== 'Savings' && (!h.ticker?.startsWith('CANARA_') || h.subType === 'PPF')) }) : undefined}>
             <BankStatementContent />
           </SourceRow>
 
