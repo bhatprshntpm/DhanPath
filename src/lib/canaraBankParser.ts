@@ -289,7 +289,7 @@ function parseKotakBalancePDF(text: string, filename: string): CanaraParseResult
   const accounts: CanaraAccount[] = []
 
   // Each row: BRANCHNAME  ACCTNO  INR  (SAVING|TERM DEPOSIT)  CR  BALANCE
-  const rowRe = /[A-Z]+\s+(\d{8,12})\s+INR\s+(SAVING|TERM\s+DEPOSIT)\s+CR\s+([\d.]+)/gi
+  const rowRe = /[A-Z]+\s+(\d{8,12})\s+INR\s+(SAVING|TERM\s+DEPOSIT)\s+CR\s+([\d,]+\.?\d*)/gi
   let m: RegExpExecArray | null
   while ((m = rowRe.exec(text)) !== null) {
     const accountNumber = m[1]
@@ -333,7 +333,7 @@ export async function parseCanaraFile(file: File): Promise<CanaraParseResult> {
 
     if (name.endsWith('.pdf')) {
       const text = await extractPDFText(file)
-      if (/kotak/i.test(text) && /balance\s*certificate/i.test(text)) {
+      if (/balance\s*certificate/i.test(text) && /CRN\s*:/i.test(text) && /(SAVING|TERM\s+DEPOSIT)\s+CR/i.test(text)) {
         return parseKotakBalancePDF(text, file.name)
       }
       if (/PPF\s*Statement/i.test(text)) {
