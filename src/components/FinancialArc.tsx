@@ -7,7 +7,7 @@ import {
 import { ChevronDown, ChevronRight, RotateCcw, Zap, HelpCircle } from 'lucide-react'
 import { useApp } from '../context/AppContext'
 import {
-  projectLifetime, fireNumber,
+  projectLifetime, computeFireYear,
   fmtINR, totalAssets, totalLiabilities,
 } from '../lib/calc'
 
@@ -172,9 +172,6 @@ function Slider({ label, value, min, max, step, prefix, suffix, onChange }: {
 }
 
 // ─── fire year from projection ────────────────────────────────────────────────
-function fireYearFromProj(proj: { year: number; value: number }[], target: number) {
-  return proj.find(p => p.value >= target)?.year ?? null
-}
 
 // ─── main ────────────────────────────────────────────────────────────────────
 export default function FinancialArc() {
@@ -238,12 +235,15 @@ export default function FinancialArc() {
   const projCur = curScenario ? projectLifetime(nwNow, settings, curScenario, goals) : []
   const projWi  = wiScenario  ? projectLifetime(nwNow, settings, wiScenario,  goals) : []
 
-  const fireCur    = cur.expenses > 0 ? fireNumber(cur.expenses, settings.safeWithdrawalRate) : 0
-  const fireYearCur = fireYearFromProj(projCur, fireCur)
-  const fireYearWi  = projWi.length > 0 ? fireYearFromProj(projWi, fireCur) : null
-  const fireAgeCur  = fireYearCur ? settings.currentAge + (fireYearCur - currentYear) : null
-  const fireAgeWi   = fireYearWi  ? settings.currentAge + (fireYearWi  - currentYear) : null
-  const yearsDelta  = (fireYearCur && fireYearWi) ? fireYearCur - fireYearWi : null
+  const fireAgeCur = useMemo(() => {
+    if (!curScenario) return null
+    return computeFireYear(nwNow, settings, curScenario)
+  }, [nwNow, settings, curScenario])
+  const fireAgeWi = useMemo(() => {
+    if (!wiActive || !wiScenario) return null
+    return computeFireYear(nwNow, settings, wiScenario)
+  }, [nwNow, settings, wiScenario, wiActive])
+  const yearsDelta = (fireAgeCur !== null && fireAgeWi !== null) ? fireAgeCur - fireAgeWi : null
 
   const currentMonth = new Date().toISOString().slice(0, 7)
   const pastRows     = useMemo(() => rows.filter(r => r.s.date <= currentMonth), [rows, currentMonth])
@@ -316,7 +316,10 @@ export default function FinancialArc() {
   const monthlySavingsTotal = (baseAssump?.monthlyIncome ?? 0) > 0
     ? (baseAssump!.monthlyIncome - (settings.monthlyExpenses ?? 0)) + (settings.existingSIP ?? baseAssump?.extraMonthlySavings ?? 0)
     : (settings.existingSIP ?? baseAssump?.extraMonthlySavings ?? 0)
-  const withdrawalPerMonth = fireCur * (settings.safeWithdrawalRate / 100) / 12
+  const corpusAtFire = fireAgeCur !== null
+    ? (projCur.find(p => p.age === fireAgeCur)?.value ?? 0)
+    : 0
+  const withdrawalPerMonth = corpusAtFire * (settings.safeWithdrawalRate / 100) / 12
 
   const wiDiffers = wiActive && extraSip > 0
 
@@ -347,7 +350,10 @@ export default function FinancialArc() {
             <div className="mt-2 p-3 bg-surface-50 rounded-xl border border-surface-100 text-xs text-surface-600 flex flex-col gap-2">
               <div className="grid grid-cols-2 gap-x-6 gap-y-1.5">
                 <span className="text-surface-400">FIRE target</span>
-                <span className="font-semibold text-surface-800">{fmtINR(fireCur)} <span className="font-normal text-surface-400">(25× annual spend)</span></span>
+                <span className="font-semibold text-surface-800">
+                    {fireAgeCur ? fmtINR(corpusAtFire) : '—'}
+                    <span className="font-normal text-surface-400"> needed to fund life to age {settings.lifeExpectancy}</span>
+                  </span>
                 <span className="text-surface-400">Monthly expenses used</span>
                 <span className="font-semibold">{fmtINR(settings.monthlyExpenses ?? 0)}/mo{(settings.monthlyExpenses ?? 0) === 60000 ? <span className="text-amber-500 font-normal"> · default — update in Settings</span> : null}</span>
                 <span className="text-surface-400">Monthly savings</span>
@@ -357,7 +363,7 @@ export default function FinancialArc() {
                 <span className="text-surface-400">Inflation</span>
                 <span className="font-semibold">{settings.inflationRate ?? 6}%/yr</span>
                 <span className="text-surface-400">Safe withdrawal rate</span>
-                <span className="font-semibold">{settings.safeWithdrawalRate ?? 4}% → {fmtINR(Math.round(withdrawalPerMonth))}/mo at FIRE</span>
+                <span className="font-semibold">{settings.safeWithdrawalRate ?? 4}% → {fmtINR(Math.round(withdrawalPerMonth))}/mo withdrawable at FIRE age</span>
               </div>
               <div className="border-t border-surface-100 pt-2 text-surface-400 leading-relaxed">
                 On retirement, SIPs stop. Your portfolio funds life at {settings.safeWithdrawalRate ?? 4}% annual withdrawal — historically sustainable for 30+ years.

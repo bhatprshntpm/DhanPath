@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { TrendingUp, TrendingDown } from 'lucide-react'
 import { useApp } from '../context/AppContext'
 import {
-  netWorth, fmtINR, fireNumber, projectLifetime,
+  netWorth, fmtINR, computeFireYear,
   totalAssets, totalLiabilities, requiredMonthlySIP,
 } from '../lib/calc'
 
@@ -35,12 +35,10 @@ export default function VitalsBar() {
   const currentYear = new Date().getFullYear()
 
   const fireAge = useMemo(() => {
-    if (!baseline || settings.monthlyExpenses <= 0) return null
-    const target = fireNumber(settings.monthlyExpenses, settings.safeWithdrawalRate)
-    const proj   = projectLifetime(nwNow, settings, baseline, goals.filter(g => g.enabled))
-    const hit    = proj.find(p => p.value >= target && p.phase === 'accumulation')
-    return hit ? settings.currentAge + (hit.year - currentYear) : null
-  }, [baseline, nwNow, settings, goals, currentYear])
+    if (!baseline) return null
+    const yr = computeFireYear(nwNow, settings, baseline)
+    return yr !== null ? settings.currentAge + (yr - currentYear) : null
+  }, [baseline, nwNow, settings, currentYear])
 
   const requiredSIP = useMemo(() => {
     const enabled = goals.filter(g => g.enabled)

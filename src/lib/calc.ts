@@ -58,6 +58,57 @@ function blendedReturn(equityReturn: number, debtReturn: number, equityAllocatio
   return (eq * equityReturn + (1 - eq) * debtReturn) / 100
 }
 
+// Correct FIRE year: earliest year where retiring produces a portfolio that
+// never depletes before lifeExpectancy — accounts for actual retirement horizon.
+// This replaces the naive 25× rule which assumes a 30-yr retirement.
+export function computeFireYear(
+  currentNetWorth: number,
+  settings: Settings,
+  scenario: Scenario,
+): number | null {
+  const { currentAge, lifeExpectancy } = settings
+  const {
+    monthlyExpenses, monthlyIncome, extraMonthlySavings,
+    equityReturn, debtReturn, equityAllocation,
+    sipStepUp, incomeGrowthRate, inflationRate, lifestyleMultiplier,
+  } = scenario.assumptions
+
+  const r      = blendedReturn(equityReturn, debtReturn, equityAllocation)
+  const inf    = inflationRate / 100
+  const stepUp = (sipStepUp ?? 10) / 100
+  const incG   = (incomeGrowthRate ?? 5) / 100
+  const lsM    = lifestyleMultiplier ?? 1
+  const curYr  = new Date().getFullYear()
+  const endYr  = curYr + (lifeExpectancy - currentAge)
+  const maxTestAge = Math.min(lifeExpectancy - 5, currentAge + 60)
+
+  function survives(portfolio: number, fromYear: number): boolean {
+    let p = portfolio
+    for (let yr = fromYear + 1; yr <= endYr; yr++) {
+      const y = yr - curYr
+      p = p * (1 + r) - (monthlyExpenses * 12) * Math.pow(1 + inf, y) * lsM
+      if (p <= 0) return false
+    }
+    return true
+  }
+
+  let portfolio = Math.max(currentNetWorth, 0)
+  for (let year = curYr; year <= curYr + (maxTestAge - currentAge); year++) {
+    const age = currentAge + (year - curYr)
+    const y   = year - curYr
+
+    // Apply one year of accumulation growth
+    const inc  = (monthlyIncome * 12) * Math.pow(1 + incG, y)
+    const exp  = (monthlyExpenses * 12) * Math.pow(1 + inf, y)
+    const sip  = (extraMonthlySavings * 12) * Math.pow(1 + stepUp, y)
+    portfolio  = Math.max(portfolio * (1 + r) + (inc - exp) + sip, 0)
+
+    if (age >= currentAge && survives(portfolio, year)) return year
+  }
+  return null
+}
+
+
 export interface ProjectionPoint {
   year: number
   age: number
@@ -213,6 +264,24 @@ export function yearsToFire(
   const hit    = points.find(p => p.value >= target && p.phase === 'accumulation')
   return hit ? hit.year - new Date().getFullYear() : -1
 }
+
+// Find earliest retirement age where portfolio never depletes through lifeExpectancy.
+// This is the REAL FIRE age — NOT the naive 25× rule which is calibrated for 30-yr retirements.
+// For a 38-year-old planning to 100, a 62-year drawdown needs a much larger corpus.
+export function trueFireAge(
+  currentNetWorth: number,
+  settings: Settings,
+  scenario: Scenario,
+  goals: Goal[],
+): number | null {
+  const maxTestAge = Math.min(settings.lifeExpectancy - 5, settings.currentAge + 60)
+  for (let retAge = settings.currentAge; retAge <= maxTestAge; retAge++) {
+    const proj = projectLifetime(currentNetWorth, { ...settings, retirementAge: retAge }, scenario, goals)
+    if (proj.every(p => p.value > 0)) return retAge
+  }
+  return null
+}
+
 
 export function requiredMonthlySIP(
   currentNetWorth: number,
