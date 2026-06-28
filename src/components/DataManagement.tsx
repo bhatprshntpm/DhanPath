@@ -17,6 +17,8 @@ import { parseNPSPDF, npsToHoldings } from '../lib/npsParser'
 import type { NPSParseResult } from '../lib/npsParser'
 import { parseIndianBankPDF, bankToHolding, bankToSnapshot } from '../lib/indianBankParser'
 import type { BankParseResult } from '../lib/indianBankParser'
+import { parseCanaraFile, canaraAccountToHolding } from '../lib/canaraBankParser'
+import type { CanaraParseResult } from '../lib/canaraBankParser'
 import { useApp } from '../context/AppContext'
 import { DEFAULT_DATA } from '../lib/storage'
 import { fmtINR } from '../lib/calc'
@@ -715,6 +717,126 @@ function BankStatementContent() {
 }
 
 // ─── Fixed Deposits ───────────────────────────────────────────────────────────
+// ─── Canara Bank ─────────────────────────────────────────────────────────────
+function CanaraContent() {
+  const { data, upsertHoldings, addOrUpdateSnapshot } = useApp()
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [results, setResults] = useState<CanaraParseResult[]>([])
+  const [loading, setLoading] = useState(false)
+  const [imported, setImported] = useState(false)
+  const allAccounts = results.flatMap(r => r.accounts)
+  const errors = results.filter(r => r.status === 'error')
+
+  async function handleFiles(files: FileList | File[]) {
+    setLoading(true); setImported(false)
+    const parsed = await Promise.all(Array.from(files).map(f => parseCanaraFile(f)))
+    setResults(parsed); setLoading(false)
+  }
+
+  function handleImport() {
+    if (!allAccounts.length) return
+    upsertHoldings(allAccounts.map(canaraAccountToHolding))
+    const sv = allAccounts.filter(a => a.accountType === 'savings').reduce((s, a) => s + a.balance, 0)
+    const fd = allAccounts.filter(a => a.accountType === 'fd').reduce((s, a) => s + a.balance, 0)
+    const pp = allAccounts.filter(a => a.accountType === 'ppf').reduce((s, a) => s + a.balance, 0)
+    const bd: Record<string, number> = {}
+    if (sv) bd['Cash & Savings'] = sv
+    if (fd) bd['Debt'] = (bd['Debt'] ?? 0) + fd
+    if (pp) bd['EPF / NPS / PPF'] = (bd['EPF / NPS / PPF'] ?? 0) + pp
+    addOrUpdateSnapshot({
+      date: new Date().toISOString().slice(0, 7),
+      assets: { checking: 0, savings: sv, brokerage: 0, retirement: pp, realEstate: 0, other: 0 },
+      liabilities: { mortgage: 0, studentLoans: 0, creditCards: 0, autoLoans: 0, other: 0 },
+      breakdown: bd,
+    })
+    setImported(true)
+  }
+
+  const ch = data.holdings.filter(h => h.ticker?.startsWith('CANARA_'))
+  const TL: Record<string, string> = { savings: 'Savings A/C', fd: 'Fixed Deposit', ppf: 'PPF' }
+  const TC: Record<string, string> = { savings: 'text-emerald-700', fd: 'text-blue-700', ppf: 'text-indigo-700' }
+
+  return (
+    <div className="flex flex-col gap-4 p-4 pt-2">
+      {ch.length > 0 && (
+        <div className="flex flex-col gap-1.5">
+          {ch.map(h => (
+            <div key={h.id} className="flex justify-between text-xs py-1.5 px-3 bg-surface-50 rounded-lg">
+              <span className="font-medium text-surface-700">{h.name}</span>
+              <span className="font-mono">{fmtINR(h.value)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      <div
+        className="border-2 border-dashed border-surface-200 hover:border-emerald-400 hover:bg-emerald-50/20 rounded-2xl p-6 flex flex-col items-center gap-3 cursor-pointer transition-all"
+        onClick={() => fileRef.current?.click()}
+        onDragOver={e => e.preventDefault()}
+        onDrop={e => { e.preventDefault(); if (e.dataTransfer.files.length) handleFiles(e.dataTransfer.files) }}>
+        <Upload size={22} className="text-surface-300" />
+        <div className="text-center">
+          <p className="text-sm font-semibold text-surface-700">Drop Canara Bank files here</p>
+          <p className="text-xs text-surface-400 mt-0.5">Savings CSV · FD receipt PDFs · PPF PDF — all at once</p>
+        </div>
+        <input ref={fileRef} type="file" accept=".csv,.pdf" multiple className="hidden"
+          onChange={e => { if (e.target.files?.length) handleFiles(e.target.files); e.target.value = '' }} />
+      </div>
+      {loading && (
+        <div className="flex items-center gap-2 text-xs text-surface-500">
+          <Loader2 size={13} className="animate-spin" /> Parsing files…
+        </div>
+      )}
+      {!loading && allAccounts.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <p className="text-[10px] uppercase tracking-widest font-semibold text-surface-400">
+            Preview — {allAccounts.length} account{allAccounts.length !== 1 ? 's' : ''} found
+          </p>
+          <div className="rounded-xl overflow-hidden border border-surface-100">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="bg-surface-50 text-surface-400">
+                  <th className="text-left px-3 py-2">Type</th>
+                  <th className="text-left px-3 py-2">Account</th>
+                  <th className="text-right px-3 py-2">Balance</th>
+                  <th className="text-right px-3 py-2">Matures</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-surface-50">
+                {allAccounts.map((acc, i) => (
+                  <tr key={i}>
+                    <td className={`px-3 py-2.5 font-semibold ${TC[acc.accountType]}`}>{TL[acc.accountType]}</td>
+                    <td className="px-3 py-2.5 font-mono text-surface-500">…{acc.accountNumber.slice(-6)}</td>
+                    <td className="px-3 py-2.5 text-right font-mono font-semibold">{fmtINR(acc.balance)}</td>
+                    <td className="px-3 py-2.5 text-right text-surface-400">
+                      {acc.maturityDate
+                        ? new Date(acc.maturityDate).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })
+                        : acc.accountType === 'ppf' ? 'PPF lock-in' : '—'}
+                    </td>
+                  </tr>
+                ))}
+                <tr className="bg-surface-50 font-semibold">
+                  <td colSpan={2} className="px-3 py-2 text-surface-600">Total</td>
+                  <td className="px-3 py-2 text-right font-mono">{fmtINR(allAccounts.reduce((s, a) => s + a.balance, 0))}</td>
+                  <td />
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          {errors.map((r, i) => <p key={i} className="text-[11px] text-rose-500">⚠ {r.message}</p>)}
+          {imported
+            ? <div className="flex items-center gap-2 text-xs font-semibold text-emerald-700 bg-emerald-50 px-3 py-2.5 rounded-xl"><CheckCircle size={13} /> Imported</div>
+            : <button onClick={handleImport} className="btn-primary flex items-center gap-2 justify-center text-sm py-2.5"><CheckCircle size={14} /> Import {allAccounts.length} account{allAccounts.length !== 1 ? 's' : ''}</button>
+          }
+        </div>
+      )}
+      {!loading && results.length > 0 && allAccounts.length === 0 && (
+        <p className="text-xs text-rose-500">{results.map(r => r.message).join(' · ')}</p>
+      )}
+    </div>
+  )
+}
+
+
 function FDContent() {
   const { data, addHolding, deleteHolding } = useApp()
   const fdHoldings = data.holdings.filter(h => h.subType === 'Fixed Deposit')
@@ -902,6 +1024,7 @@ export default function DataManagement() {
   const cryptoCount    = data.holdings.filter(h => h.type === 'crypto').length
   const bankHoldings   = data.holdings.filter(h => h.subType === 'Savings')
   const fdHoldingsMain = data.holdings.filter(h => h.subType === 'Fixed Deposit')
+  const canaraHoldings = data.holdings.filter(h => h.ticker?.startsWith('CANARA_'))
 
   function handleResetAll() {
     if (!confirmingReset) { setConfirmingReset(true); return }
@@ -965,6 +1088,15 @@ export default function DataManagement() {
             connected={cryptoCount > 0} statusLabel={cryptoCount > 0 ? `${cryptoCount} coin${cryptoCount > 1 ? 's' : ''}` : 'Not added — add manually'}
             onClear={cryptoCount > 0 ? () => replaceData({ ...data, holdings: data.holdings.filter(h => h.type !== 'crypto') }) : undefined}>
             <CryptoContent />
+          </SourceRow>
+
+                    <SourceRow icon={<Building2 size={15} />} label="Canara Bank" color="emerald"
+            connected={canaraHoldings.length > 0}
+            statusLabel={canaraHoldings.length > 0
+              ? canaraHoldings.map(h => h.name.split('(')[0].trim() + ' ' + fmtINR(h.value)).join(' · ')
+              : 'Not imported — drop CSV/PDF files'}
+            onClear={canaraHoldings.length > 0 ? () => replaceData({ ...data, holdings: data.holdings.filter(h => !h.ticker?.startsWith('CANARA_')) }) : undefined}>
+            <CanaraContent />
           </SourceRow>
 
           <SourceRow icon={<Banknote size={15} />} label="Bank Statements" color="green"
