@@ -4,7 +4,7 @@ import {
   ReferenceLine, XAxis, YAxis, Tooltip,
   ResponsiveContainer, CartesianGrid,
 } from 'recharts'
-import { ChevronDown, ChevronRight, RotateCcw, Zap } from 'lucide-react'
+import { ChevronDown, ChevronRight, RotateCcw, Zap, HelpCircle } from 'lucide-react'
 import { useApp } from '../context/AppContext'
 import {
   projectLifetime, fireNumber,
@@ -308,6 +308,16 @@ export default function FinancialArc() {
   const yMax = visibleValues.length ? Math.ceil(Math.max(...visibleValues) * 1.1)  : undefined
   const yDomain: [number | string, number | string] = view === 'lifetime' ? [0, 'auto'] : [yMin, yMax ?? 'auto']
 
+  const [showAssumptions, setShowAssumptions] = useState(false)
+
+  const blendedRet = baseAssump
+    ? Math.round((baseAssump.equityReturn * (baseAssump.equityAllocation / 100) + baseAssump.debtReturn * (1 - baseAssump.equityAllocation / 100)) * 10) / 10
+    : 12
+  const monthlySavingsTotal = (baseAssump?.monthlyIncome ?? 0) > 0
+    ? (baseAssump!.monthlyIncome - (settings.monthlyExpenses ?? 0)) + (settings.existingSIP ?? baseAssump?.extraMonthlySavings ?? 0)
+    : (settings.existingSIP ?? baseAssump?.extraMonthlySavings ?? 0)
+  const withdrawalPerMonth = fireCur * (settings.safeWithdrawalRate / 100) / 12
+
   const wiDiffers = wiActive && extraSip > 0
 
   return (
@@ -324,7 +334,37 @@ export default function FinancialArc() {
                 → what-if age {fireAgeWi} ({yearsDelta > 0 ? `${yearsDelta} yrs earlier` : `${Math.abs(yearsDelta)} yrs later`})
               </span>
             )}
+            {fireAgeCur && (
+              <button onClick={() => setShowAssumptions(v => !v)}
+                className="inline-flex items-center gap-1 ml-1 text-surface-300 hover:text-surface-500 transition-colors align-middle">
+                <HelpCircle size={11} />
+              </button>
+            )}
           </p>
+
+          {/* Assumptions panel */}
+          {showAssumptions && fireAgeCur && (
+            <div className="mt-2 p-3 bg-surface-50 rounded-xl border border-surface-100 text-xs text-surface-600 flex flex-col gap-2">
+              <div className="grid grid-cols-2 gap-x-6 gap-y-1.5">
+                <span className="text-surface-400">FIRE target</span>
+                <span className="font-semibold text-surface-800">{fmtINR(fireCur)} <span className="font-normal text-surface-400">(25× annual spend)</span></span>
+                <span className="text-surface-400">Monthly expenses used</span>
+                <span className="font-semibold">{fmtINR(settings.monthlyExpenses ?? 0)}/mo{(settings.monthlyExpenses ?? 0) === 60000 ? <span className="text-amber-500 font-normal"> · default — update in Settings</span> : null}</span>
+                <span className="text-surface-400">Monthly savings</span>
+                <span className="font-semibold">{fmtINR(Math.max(monthlySavingsTotal, 0))}/mo <span className="font-normal text-surface-400">(income surplus + SIP)</span></span>
+                <span className="text-surface-400">Expected return</span>
+                <span className="font-semibold">{blendedRet}% blended <span className="font-normal text-surface-400">({baseAssump?.equityAllocation ?? 70}% equity @ {baseAssump?.equityReturn ?? 14}%)</span></span>
+                <span className="text-surface-400">Inflation</span>
+                <span className="font-semibold">{settings.inflationRate ?? 6}%/yr</span>
+                <span className="text-surface-400">Safe withdrawal rate</span>
+                <span className="font-semibold">{settings.safeWithdrawalRate ?? 4}% → {fmtINR(Math.round(withdrawalPerMonth))}/mo at FIRE</span>
+              </div>
+              <div className="border-t border-surface-100 pt-2 text-surface-400 leading-relaxed">
+                On retirement, SIPs stop. Your portfolio funds life at {settings.safeWithdrawalRate ?? 4}% annual withdrawal — historically sustainable for 30+ years.
+                Salary surplus ({fmtINR(Math.max((baseAssump?.monthlyIncome ?? 0) - (settings.monthlyExpenses ?? 0), 0))}/mo) also stops.
+              </div>
+            </div>
+          )}
         </div>
         <div className="flex items-center bg-surface-100 rounded-lg p-0.5 gap-0.5">
           {(['5yr', '10yr', 'lifetime'] as ViewMode[]).map(v => (
