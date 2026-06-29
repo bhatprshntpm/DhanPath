@@ -33,10 +33,22 @@ export default function VitalsBar() {
 
   const baseline  = scenarios.find(s => s.enabled && s.id === 'baseline') ?? scenarios.find(s => s.enabled)
 
-  const fireAge = useMemo(() => {
+  const effectiveScenario = useMemo(() => {
     if (!baseline) return null
-    return trueFireAge(nwNow, settings, baseline, goals.filter(g => g.enabled))
-  }, [baseline, nwNow, settings, goals])
+    return {
+      ...baseline,
+      assumptions: {
+        ...baseline.assumptions,
+        extraMonthlySavings: settings.existingSIP > 0 ? settings.existingSIP : (baseline.assumptions.extraMonthlySavings ?? 0),
+        monthlyExpenses: (settings.monthlyExpenses ?? 60000) + (settings.monthlyEMI ?? 0),
+      },
+    }
+  }, [baseline, settings])
+
+  const fireAge = useMemo(() => {
+    if (!effectiveScenario) return null
+    return trueFireAge(nwNow, settings, effectiveScenario, goals.filter(g => g.enabled))
+  }, [effectiveScenario, nwNow, settings, goals])
 
   const requiredSIP = useMemo(() => {
     const enabled = goals.filter(g => g.enabled)
