@@ -231,12 +231,11 @@ export default function FinancialArc({ onOpenSettings }: { onOpenSettings?: () =
   }
 
   const curScenario = makeScenario(cur)
-  const wiLevers = { ...cur, monthlySavings: cur.monthlySavings + extraSip }
+  const wiLevers    = { ...cur, monthlySavings: cur.monthlySavings + extraSip }
   const wiScenario  = wiActive ? makeScenario(wiLevers) : null
 
-  const projCur = curScenario ? projectLifetime(nwNow, settings, curScenario, goals) : []
-  const projWi  = wiScenario  ? projectLifetime(nwNow, settings, wiScenario,  goals) : []
-
+  // Compute FIRE age FIRST — chart must use this as the retirement age so
+  // the graph and the sentence are projecting the same scenario.
   const fireYearCur = useMemo(() => {
     if (!curScenario) return null
     const age = trueFireAge(nwNow, settings, curScenario, goals.filter(g => g.enabled))
@@ -247,9 +246,16 @@ export default function FinancialArc({ onOpenSettings }: { onOpenSettings?: () =
     const age = trueFireAge(nwNow, settings, wiScenario, goals.filter(g => g.enabled))
     return age !== null ? new Date().getFullYear() + (age - settings.currentAge) : null
   }, [nwNow, settings, wiScenario, wiActive, goals])
-  const fireAgeCur  = fireYearCur !== null ? settings.currentAge + (fireYearCur - currentYear) : null
-  const fireAgeWi   = fireYearWi  !== null ? settings.currentAge + (fireYearWi  - currentYear) : null
-  const yearsDelta  = (fireYearCur !== null && fireYearWi !== null) ? fireYearCur - fireYearWi : null
+  const fireAgeCur = fireYearCur !== null ? settings.currentAge + (fireYearCur - currentYear) : null
+  const fireAgeWi  = fireYearWi  !== null ? settings.currentAge + (fireYearWi  - currentYear) : null
+  const yearsDelta = (fireYearCur !== null && fireYearWi !== null) ? fireYearCur - fireYearWi : null
+
+  // Use FIRE age as the retirement split in the chart — not settings.retirementAge.
+  // Without this, the chart shows a different retirement age from the sentence.
+  const projSettings   = fireAgeCur ? { ...settings, retirementAge: fireAgeCur } : settings
+  const projSettingsWi = fireAgeWi  ? { ...settings, retirementAge: fireAgeWi  } : settings
+  const projCur = curScenario ? projectLifetime(nwNow, projSettings,   curScenario, goals) : []
+  const projWi  = wiScenario  ? projectLifetime(nwNow, projSettingsWi, wiScenario,  goals) : []
 
   const currentMonth = new Date().toISOString().slice(0, 7)
   const pastRows     = useMemo(() => rows.filter(r => r.s.date <= currentMonth), [rows, currentMonth])
