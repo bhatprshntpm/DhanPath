@@ -346,10 +346,10 @@ export function zerodhaToSnapshot(parsed: ZerodhaParseResult): Omit<NetWorthSnap
     assets: {
       checking:   0,
       savings:    0,
-      brokerage:  Math.round((by['Equity'] ?? 0) + (by['Debt'] ?? 0) + (by['International'] ?? 0) + (by['Cryptocurrency'] ?? 0)),
+      brokerage:  Math.round((by['Equity'] ?? 0) + (by['Debt'] ?? 0) + (by['International'] ?? 0) + (by['Cryptocurrency'] ?? 0) + (by['Gold'] ?? 0)),
       retirement: 0,
       realEstate: 0,
-      other:      Math.round(by['Gold'] ?? 0),
+      other:      0,
     },
     liabilities: { mortgage: 0, studentLoans: 0, creditCards: 0, autoLoans: 0, other: 0 },
     breakdown,

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { ChevronDown, ChevronRight, Plus, Trash2, RefreshCw, AlertTriangle, Settings2 } from 'lucide-react'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
 import { useApp } from '../context/AppContext'
-import { fmtINR, fmtPct } from '../lib/calc'
+import { fmtINR, fmtPct, totalLiabilities } from '../lib/calc'
 import { refreshAllPrices } from '../lib/livePrice'
 import EmptyState from './EmptyState'
 import type { Holding } from '../types'
@@ -54,7 +54,7 @@ function holdingSubType(h: Holding): string {
 }
 
 export default function AssetAllocationCard() {
-  const { data, addHolding, deleteHolding, updateHolding, updateSettings } = useApp()
+  const { data, addHolding, deleteHolding, updateHolding, updateSettings, addOrUpdateSnapshot } = useApp()
   const [expandedClass, setExpandedClass] = useState<string | null>(null)
   const [showAddForm,   setShowAddForm]   = useState(false)
   const [showTargetForm,setShowTargetForm] = useState(false)
@@ -137,6 +137,35 @@ export default function AssetAllocationCard() {
       updateHolding,
     )
     setRefreshResult({ updated: result.updated, failed: result.failed, skipped: result.skipped })
+
+    // After every refresh, take a snapshot so the historical chart builds automatically
+    if (result.updated > 0) {
+      const updatedHoldings = data.holdings  // AppContext already mutated values via updateHolding
+      const byClass: Record<string, number> = {}
+      for (const h of updatedHoldings) {
+        const cls = h.assetClass ?? (h.type === 'retirement' ? 'Retirement' : 'Other')
+        byClass[cls] = (byClass[cls] ?? 0) + h.value
+      }
+      const latestSnap = data.snapshots.length
+        ? [...data.snapshots].sort((a, b) => a.date.localeCompare(b.date)).at(-1)
+        : null
+      const liab = latestSnap ? totalLiabilities(latestSnap) : 0
+      void liab
+      addOrUpdateSnapshot({
+        date: new Date().toISOString().slice(0, 7),
+        assets: {
+          checking:   latestSnap?.assets.checking   ?? 0,
+          savings:    latestSnap?.assets.savings     ?? 0,
+          brokerage:  Math.round((byClass['Equity'] ?? 0) + (byClass['Debt'] ?? 0) + (byClass['International'] ?? 0) + (byClass['Cryptocurrency'] ?? 0) + (byClass['Gold'] ?? 0)),
+          retirement: Math.round((byClass['Retirement'] ?? 0)),
+          realEstate: latestSnap?.assets.realEstate  ?? 0,
+          other:      latestSnap?.assets.other        ?? 0,
+        },
+        liabilities: latestSnap?.liabilities ?? { mortgage: 0, studentLoans: 0, creditCards: 0, autoLoans: 0, other: 0 },
+        breakdown:   byClass,
+      })
+    }
+
     setRefreshing(false)
   }
 
