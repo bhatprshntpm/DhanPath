@@ -67,10 +67,13 @@ async function fetchYahooPrice(symbol: string): Promise<number | null> {
   const cached = cacheGet(cacheKey)
   if (cached !== null) return cached
 
-  // Try v8 chart endpoint (most reliable for CORS)
+  const yahooPath = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d`
+
+  // Try direct first, then via CORS proxy (needed on GitHub Pages)
   const urls = [
-    `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d`,
+    yahooPath,
     `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d`,
+    `https://corsproxy.io/?url=${encodeURIComponent(yahooPath)}`,
   ]
   for (const url of urls) {
     try {
