@@ -117,6 +117,30 @@ async function fetchGoldPriceINR(): Promise<number | null> {
   } catch { return null }
 }
 
+// ─── Returns true if this holding has a live price feed ──────────────────────
+export function hasPriceFeed(h: Holding): boolean {
+  const isin = h.ticker?.trim() ?? ''
+  const cls  = h.assetClass ?? ''
+  // Bank savings, FDs, deposits — no market price
+  if (h.type === 'cash') return false
+  if (['Savings', 'FD', 'Fixed Deposit', 'RecurringDeposit'].includes(h.subType ?? '')) return false
+  if (/^(SAV|FD|CANARA_SAV|CANARA_FD|CANARA_PPF)-/i.test(isin)) return false
+  // Retirement instruments — EPF/PPF/NPS have no live price
+  if (h.type === 'retirement') return false
+  if (/^(EPF|PPF|NPS|VPF)-/i.test(isin)) return false
+  // Manual placeholders
+  if (isin === '' || isin === 'MANUAL') return false
+  // Mutual funds, equity, gold, crypto, international stocks — all have feeds
+  if (isin.startsWith('INF')) return true  // MF
+  if (isin.startsWith('INE')) return true  // Indian equity
+  if (isin.startsWith('IN8')) return true  // SGB
+  if (cls === 'Gold') return true
+  if (cls === 'Cryptocurrency' || h.type === 'crypto') return true
+  if (cls === 'International') return true
+  if (h.type === 'stock' || h.type === 'etf') return true
+  return false
+}
+
 // ─── Main: returns PRICE PER UNIT in INR (caller multiplies by qty) ──────────
 // Exception: for Gold physical where qty = grams, returns INR per gram
 export async function fetchLivePrice(h: Holding): Promise<number | null> {
@@ -185,7 +209,10 @@ export async function refreshAllPrices(
     const h = holdings[i]
     onProgress(i, holdings.length)
 
-    // Skip holdings with no quantity and no way to derive value
+    // Skip non-marketable assets (bank accounts, FDs, PPF, EPF, NPS etc.)
+    if (!hasPriceFeed(h)) { skipped++; continue }
+
+    // Skip holdings with no quantity
     if (!h.qty || h.qty <= 0) { skipped++; continue }
 
     const pricePerUnit = await fetchLivePrice(h)

@@ -61,7 +61,7 @@ export default function AssetAllocationCard() {
   const [targetDraft,   setTargetDraft]   = useState<Record<string,number>>({})
   const [refreshing,    setRefreshing]    = useState(false)
   const [refreshProgress, setRefreshProgress] = useState({ done: 0, total: 0 })
-  const [refreshResult, setRefreshResult] = useState<{ updated: number; failed: number } | null>(null)
+  const [refreshResult, setRefreshResult] = useState<{ updated: number; failed: number; skipped: number } | null>(null)
   const [form, setForm] = useState({ name: '', ticker: '', type: 'etf' as const, value: '', costBasis: '' })
 
   const latest = data.snapshots.length
@@ -136,7 +136,7 @@ export default function AssetAllocationCard() {
       (done, total) => setRefreshProgress({ done, total }),
       updateHolding,
     )
-    setRefreshResult({ updated: result.updated, failed: result.failed })
+    setRefreshResult({ updated: result.updated, failed: result.failed, skipped: result.skipped })
     setRefreshing(false)
   }
 
@@ -193,8 +193,11 @@ export default function AssetAllocationCard() {
 
       {refreshResult && (
         <p className="text-[11px] text-surface-400 -mt-2">
-          Updated {refreshResult.updated} holdings
-          {refreshResult.failed > 0 && ` · ${refreshResult.failed} could not be fetched (no public price)`}
+          {refreshResult.updated > 0
+            ? `Updated ${refreshResult.updated} holdings`
+            : 'No market-priced holdings to update'}
+          {refreshResult.skipped > 0 && ` · ${refreshResult.skipped} skipped (bank/FD/PPF — update by re-importing statements)`}
+          {refreshResult.failed > 0 && ` · ${refreshResult.failed} failed`}
         </p>
       )}
 
