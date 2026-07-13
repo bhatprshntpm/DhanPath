@@ -70,9 +70,8 @@ function ZerodhaContent() {
     // Today's snapshot with current market values
     addOrUpdateSnapshot(zerodhaToSnapshot(result))
 
-    // Also backfill a cost-basis snapshot at the earliest date we have data for.
-    // If no earlier snapshot exists (fresh device), use last month so the chart
-    // always has at least two data points from day one.
+    // Backfill a cost-basis starting snapshot only when no prior brokerage data exists.
+    // Never overwrite a snapshot that already has real market values — that destroys history.
     const sorted = [...data.snapshots].sort((a, b) => a.date.localeCompare(b.date))
     const earliest = sorted[0]
     const todayMonth = new Date().toISOString().slice(0, 7)
@@ -80,27 +79,30 @@ function ZerodhaContent() {
       const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - 1)
       return d.toISOString().slice(0, 7)
     })()
-    // Use the oldest existing snapshot if it predates this month; otherwise fall back to last month
-    const backfillDate = (earliest && earliest.date < todayMonth) ? earliest.date : prevMonth
 
-    const byClass: Record<string, number> = {}
-    for (const h of result.holdings) {
-      byClass[h.assetClass] = (byClass[h.assetClass] ?? 0) + h.costBasis
+    const needsBackfill = !earliest                          // fresh device, no history at all
+                       || earliest.assets.brokerage === 0   // oldest snapshot has no equity data yet
+    
+    if (needsBackfill) {
+      const backfillDate = (earliest && earliest.date < todayMonth) ? earliest.date : prevMonth
+      const byClass: Record<string, number> = {}
+      for (const h of result.holdings) {
+        byClass[h.assetClass] = (byClass[h.assetClass] ?? 0) + h.costBasis
+      }
+      addOrUpdateSnapshot({
+        date: backfillDate,
+        assets: {
+          checking:   earliest?.assets.checking   ?? 0,
+          savings:    earliest?.assets.savings     ?? 0,
+          brokerage:  Math.round(result.summary.totalCost),
+          retirement: earliest?.assets.retirement  ?? 0,
+          realEstate: earliest?.assets.realEstate  ?? 0,
+          other:      earliest?.assets.other        ?? 0,
+        },
+        liabilities: earliest?.liabilities ?? { mortgage: 0, studentLoans: 0, creditCards: 0, autoLoans: 0, other: 0 },
+        breakdown: Object.fromEntries(Object.entries(byClass).map(([k, v]) => [k, Math.round(v)])),
+      })
     }
-    const totalCostBasis = Math.round(result.summary.totalCost)
-    addOrUpdateSnapshot({
-      date: backfillDate,
-      assets: {
-        checking:   earliest?.assets.checking   ?? 0,
-        savings:    earliest?.assets.savings     ?? 0,
-        brokerage:  totalCostBasis,
-        retirement: earliest?.assets.retirement  ?? 0,
-        realEstate: earliest?.assets.realEstate  ?? 0,
-        other:      earliest?.assets.other        ?? 0,
-      },
-      liabilities: earliest?.liabilities ?? { mortgage: 0, studentLoans: 0, creditCards: 0, autoLoans: 0, other: 0 },
-      breakdown: Object.fromEntries(Object.entries(byClass).map(([k, v]) => [k, Math.round(v)])),
-    })
 
     setImported(true)
   }
