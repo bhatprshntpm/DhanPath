@@ -89,7 +89,7 @@ function GrowthProjectionCard({ nwNow, annualReturn }: { nwNow: number; annualRe
     <div className="flex flex-col gap-4">
       <p className="text-xs text-surface-400">
         Based on <span className="font-semibold text-surface-700">{fmtINR(nwNow)}</span> at {annualReturn}% annual return.
-        History chart appears after 3 months of imports.
+        Refresh prices monthly to build your history chart. Set a start date in the Zerodha import to go further back.
       </p>
 
       <div className="grid grid-cols-4 gap-3">
@@ -254,9 +254,9 @@ export default function PortfolioHistory() {
     return applyCarryForward(deduped)
   }, [data.snapshots])
 
-  // Need at least 3 months that have real equity to show history
+  // Need at least 2 months with real equity to show history
   const equityMonths = rows.filter(r => hasEquity(r.s) || r.carried).length
-  const hasHistory   = equityMonths >= 2 && rows.length >= 3
+  const hasHistory   = equityMonths >= 2 && rows.length >= 2
 
   if (nwNow <= 0 && rows.length === 0) return null
 

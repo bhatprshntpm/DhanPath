@@ -50,12 +50,18 @@ function DropZone({ accept, color, onFile, label }: {
 // ─── Zerodha ──────────────────────────────────────────────────────────────────
 function ZerodhaContent() {
   const { data, replaceHoldings, addOrUpdateSnapshot } = useApp()
-  const [parsing,  setParsing]  = useState(false)
-  const [result,   setResult]   = useState<ZerodhaParseResult | null>(null)
-  const [imported, setImported] = useState(false)
-  const [clearing, setClearing] = useState(false)
+  const [parsing,   setParsing]   = useState(false)
+  const [result,    setResult]    = useState<ZerodhaParseResult | null>(null)
+  const [imported,  setImported]  = useState(false)
+  const [clearing,  setClearing]  = useState(false)
+  const [startDate, setStartDate] = useState('')
   const zerodhaHoldings = data.holdings.filter(h => h.assetClass !== 'International' && h.subType !== 'US RSU / Stock' && h.subType !== 'EPF')
   const today = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+
+  // Earliest existing snapshot — offer backfill only if we haven't gone further back
+  const earliestSnap = data.snapshots.length
+    ? [...data.snapshots].sort((a, b) => a.date.localeCompare(b.date))[0]?.date
+    : null
 
   async function handleFile(f: File) {
     setParsing(true); setResult(null); setImported(false)
@@ -65,8 +71,31 @@ function ZerodhaContent() {
   function doImport() {
     if (!result) return
     replaceHoldings(zerodhaToHoldings(result))
-    addOrUpdateSnapshot(zerodhaToSnapshot(result))
+    addOrUpdateSnapshot(zerodhaToSnapshot(result))  // today's snapshot
     setImported(true)
+  }
+  function doBackfill() {
+    if (!result || !startDate) return
+    // Cost-basis snapshot: how much you put in, as of the start month
+    const byClass: Record<string, number> = {}
+    for (const h of result.holdings) {
+      byClass[h.assetClass] = (byClass[h.assetClass] ?? 0) + h.costBasis
+    }
+    const breakdown: Record<string, number> = {}
+    for (const [k, v] of Object.entries(byClass)) if (v > 0) breakdown[k] = Math.round(v)
+    addOrUpdateSnapshot({
+      date: startDate,
+      assets: {
+        checking:   0,
+        savings:    0,
+        brokerage:  Math.round(Object.values(byClass).reduce((a, b) => a + b, 0)),
+        retirement: 0,
+        realEstate: 0,
+        other:      0,
+      },
+      liabilities: { mortgage: 0, studentLoans: 0, creditCards: 0, autoLoans: 0, other: 0 },
+      breakdown,
+    })
   }
   function doClear() {
     if (!clearing) { setClearing(true); return }
@@ -146,10 +175,33 @@ function ZerodhaContent() {
       )}
 
       {imported && (
-        <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-5 flex flex-col items-center gap-2 text-center">
-          <CheckCircle size={24} className="text-emerald-500" />
-          <p className="font-semibold text-emerald-800">{result?.holdings.length} holdings saved</p>
-          <button onClick={() => { setResult(null); setImported(false) }} className="text-xs text-emerald-600 underline">Import another file</button>
+        <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4 flex flex-col gap-3">
+          <div className="flex items-center gap-2">
+            <CheckCircle size={18} className="text-emerald-500" />
+            <p className="font-semibold text-emerald-800 text-sm">{result?.holdings.length} holdings saved</p>
+          </div>
+          {/* Backfill: only offer if we don't already have an older snapshot */}
+          {(!earliestSnap || earliestSnap >= new Date().toISOString().slice(0, 7)) && (
+            <div className="border-t border-emerald-200 pt-3 flex flex-col gap-2">
+              <p className="text-xs text-emerald-900 font-medium">When did you start investing?</p>
+              <p className="text-[11px] text-emerald-700">Sets a cost-basis starting point so your growth chart goes back further.</p>
+              <div className="flex gap-2">
+                <input
+                  type="month"
+                  value={startDate}
+                  max={new Date().toISOString().slice(0, 7)}
+                  onChange={e => setStartDate(e.target.value)}
+                  className="input-field text-xs flex-1"
+                />
+                <button
+                  onClick={doBackfill}
+                  disabled={!startDate}
+                  className="btn-primary text-xs px-3 disabled:opacity-40"
+                >Set</button>
+              </div>
+            </div>
+          )}
+          <button onClick={() => { setResult(null); setImported(false) }} className="text-xs text-emerald-600 underline text-center">Import another file</button>
         </div>
       )}
     </div>
