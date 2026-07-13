@@ -70,12 +70,18 @@ function ZerodhaContent() {
     // Today's snapshot with current market values
     addOrUpdateSnapshot(zerodhaToSnapshot(result))
 
-    // Also backfill a cost-basis snapshot at the earliest date we have data for,
-    // so the growth chart starts from when the user first tracked — not just today.
+    // Also backfill a cost-basis snapshot at the earliest date we have data for.
+    // If no earlier snapshot exists (fresh device), use last month so the chart
+    // always has at least two data points from day one.
     const sorted = [...data.snapshots].sort((a, b) => a.date.localeCompare(b.date))
     const earliest = sorted[0]
     const todayMonth = new Date().toISOString().slice(0, 7)
-    const backfillDate = (earliest && earliest.date < todayMonth) ? earliest.date : todayMonth
+    const prevMonth = (() => {
+      const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - 1)
+      return d.toISOString().slice(0, 7)
+    })()
+    // Use the oldest existing snapshot if it predates this month; otherwise fall back to last month
+    const backfillDate = (earliest && earliest.date < todayMonth) ? earliest.date : prevMonth
 
     const byClass: Record<string, number> = {}
     for (const h of result.holdings) {
