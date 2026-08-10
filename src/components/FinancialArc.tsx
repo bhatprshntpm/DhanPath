@@ -64,10 +64,18 @@ function applyCarryForward(snapshots: any[]) {
 function ArcTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null
   const age       = payload[0]?.payload?.age
+  const xv        = payload[0]?.payload?.x as number | undefined
   const goalNames = payload[0]?.payload?.goalNames as string[] | undefined
+  const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+  let lbl: any = label
+  if (typeof xv === 'number') {
+    const yr = Math.floor(xv + 1e-6)
+    const mi = Math.round((xv - yr) * 12)
+    lbl = mi === 0 ? String(yr) : `${MON[mi]} ${yr}`
+  }
   return (
     <div className="card px-4 py-3 text-sm shadow-lg max-w-xs">
-      <p className="font-semibold text-surface-800 mb-1">{label}{age != null ? ` · Age ${age}` : ''}</p>
+      <p className="font-semibold text-surface-800 mb-1">{lbl}{age != null ? ` · Age ${age}` : ''}</p>
       {payload.map((p: any) => p.value != null && Math.abs(p.value) > 0 ? (
         <p key={p.dataKey} className="flex justify-between gap-6" style={{ color: p.color ?? '#f59e0b' }}>
           <span>{p.name}</span>
@@ -262,42 +270,64 @@ export default function FinancialArc({ onOpenSettings }: { onOpenSettings?: () =
   const startYear    = pastRows.length ? parseInt(pastRows[0].s.date.slice(0, 4)) : currentYear
   const endYear      = currentYear + (settings.lifeExpectancy - settings.currentAge)
   const retireYear   = currentYear + (settings.retirementAge  - settings.currentAge)
+  const todayX       = currentYear + new Date().getMonth() / 12
 
   const windowEnd   = view === '5yr' ? currentYear + 5 : view === '10yr' ? currentYear + 10 : endYear
   const windowStart = Math.min(startYear, currentYear - 1)
 
   const allChartData = useMemo(() => {
-    const yearMap = new Map<number, any>()
-    for (let y = startYear; y <= endYear; y++) {
-      yearMap.set(y, { year: y, age: settings.currentAge + (y - currentYear) })
+    // Numeric decimal-year x-axis so intra-year monthly history plots as distinct
+    // points (Jun 2026 = 2026.42, Aug = 2026.58) instead of collapsing to one year.
+    const pts = new Map<number, any>()
+    const at = (x: number) => {
+      if (!pts.has(x)) {
+        const yr = Math.floor(x + 1e-6)
+        pts.set(x, { x, year: yr, age: settings.currentAge + (yr - currentYear) })
+      }
+      return pts.get(x)
     }
+
+    // Past monthly actuals — each snapshot at its true fractional-year position.
     rows.forEach(({ adjustedNw, s }) => {
       if (s.date > currentMonth) return
-      const yr = parseInt(s.date.slice(0, 4))
-      const pt = yearMap.get(yr)
-      if (pt && (pt.actual == null || adjustedNw > pt.actual)) pt.actual = adjustedNw
+      const [yy, mm] = s.date.split('-').map(Number)
+      const x = yy + (mm - 1) / 12
+      const pt = at(x)
+      if (pt.actual == null || adjustedNw > pt.actual) pt.actual = adjustedNw
     })
-    const curPt = yearMap.get(currentYear)
-    if (curPt && nwNow > 0) curPt.actual = nwNow
+    // Today's live net worth anchors the end of the actual line.
+    if (nwNow > 0) at(todayX).actual = nwNow
 
+    // Projection — yearly points. The current-year point is anchored at "today"
+    // (todayX) so the projection line connects seamlessly to the actual line.
     projCur.forEach(p => {
-      const pt = yearMap.get(p.year)
-      if (pt && p.year >= currentYear) {
-        pt.current  = p.value
-        pt.netFlow  = p.netFlow
-        pt.phase    = p.phase
-        if (p.phase === 'accumulation' || p.year === retireYear) pt.accumulation = p.value
-        if (p.phase === 'drawdown'     || p.year === retireYear) pt.drawdown     = p.value
-      }
+      if (p.year < currentYear) return
+      const x  = p.year === currentYear ? todayX : p.year
+      const pt = at(x)
+      pt.current = p.value
+      pt.netFlow = p.netFlow
+      pt.phase   = p.phase
+      if (p.phase === 'accumulation' || p.year === retireYear) pt.accumulation = p.value
+      if (p.phase === 'drawdown'     || p.year === retireYear) pt.drawdown     = p.value
     })
     projWi.forEach(p => {
-      const pt = yearMap.get(p.year)
-      if (pt && p.year >= currentYear) pt.whatif = p.value
+      if (p.year < currentYear) return
+      const x = p.year === currentYear ? todayX : p.year
+      at(x).whatif = p.value
     })
-    return Array.from(yearMap.values()).sort((a, b) => a.year - b.year)
-  }, [rows, projCur, projWi, startYear, endYear, currentYear, currentMonth, settings, nwNow, retireYear])
+    return Array.from(pts.values()).sort((a, b) => a.x - b.x)
+  }, [rows, projCur, projWi, currentYear, currentMonth, settings, nwNow, retireYear, todayX])
 
-  const chartData = allChartData.filter(d => d.year >= windowStart && d.year <= windowEnd)
+  const chartData = allChartData.filter(d => d.x >= windowStart && d.x <= windowEnd)
+
+  // Integer-year ticks, thinned for wide windows.
+  const xTicks = useMemo(() => {
+    const span = windowEnd - windowStart
+    const step = span <= 12 ? 2 : span <= 30 ? 5 : 10
+    const ts: number[] = []
+    for (let y = Math.ceil(windowStart); y <= windowEnd; y += step) ts.push(y)
+    return ts
+  }, [windowStart, windowEnd])
 
   const goalDots = goals.filter(g => g.enabled).map(g => ({
     year: currentYear + (g.targetAge - settings.currentAge), g,
@@ -454,7 +484,7 @@ export default function FinancialArc({ onOpenSettings }: { onOpenSettings?: () =
       {/* Chart */}
       <ResponsiveContainer width="100%" height={300}>
         <ComposedChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
-          onMouseMove={(s: any) => { if (s?.activePayload?.[0]) setHoverYear(s.activePayload[0].payload.year) }}
+          onMouseMove={(s: any) => { if (s?.activePayload?.[0]) setHoverYear(Math.round(s.activePayload[0].payload.x)) }}
           onMouseLeave={() => setHoverYear(null)}>
           <defs>
             <linearGradient id="gradAccumulation" x1="0" y1="0" x2="0" y2="1">
@@ -471,12 +501,13 @@ export default function FinancialArc({ onOpenSettings }: { onOpenSettings?: () =
             </linearGradient>
           </defs>
           <CartesianGrid strokeDasharray="3 3" stroke="#f5f5f4" vertical={false} />
-          <XAxis dataKey="year" tick={{ fontSize: 11, fill: '#a8a29e' }} tickLine={false} axisLine={false}
-            interval={Math.max(0, Math.floor(chartData.length / 7))} />
+          <XAxis dataKey="x" type="number" domain={[windowStart, windowEnd]} ticks={xTicks}
+            tickFormatter={(v: number) => String(Math.round(v))} allowDecimals={false}
+            tick={{ fontSize: 11, fill: '#a8a29e' }} tickLine={false} axisLine={false} />
           <YAxis tickFormatter={fmtAxis} tick={{ fontSize: 10, fill: '#a8a29e' }} tickLine={false} axisLine={false}
             width={62} domain={yDomain} />
           <Tooltip content={<ArcTooltip />} />
-          <ReferenceLine x={currentYear} stroke="#d6d3d1" strokeDasharray="4 4"
+          <ReferenceLine x={todayX} stroke="#d6d3d1" strokeDasharray="4 4"
             label={{ value: 'Today', position: 'insideTopLeft', fontSize: 10, fill: '#a8a29e' }} />
           {retireYear <= windowEnd && (
             <ReferenceLine x={retireYear} stroke="#f59e0b" strokeDasharray="4 4"
@@ -561,13 +592,13 @@ export default function FinancialArc({ onOpenSettings }: { onOpenSettings?: () =
         <>
           <p className="text-[10px] uppercase tracking-widest font-semibold text-surface-300">Monthly Cash Flow</p>
           <ResponsiveContainer width="100%" height={70}>
-            <ComposedChart data={chartData} margin={{ top: 0, right: 8, left: 0, bottom: 0 }}>
-              <XAxis dataKey="year" tick={{ fontSize: 9, fill: '#a8a29e' }} tickLine={false} axisLine={false} interval={Math.max(0, Math.floor(chartData.length / 7))} />
+            <ComposedChart data={chartData.filter(d => d.netFlow != null)} margin={{ top: 0, right: 8, left: 0, bottom: 0 }}>
+              <XAxis dataKey="x" type="number" domain={[windowStart, windowEnd]} ticks={xTicks} tickFormatter={(v: number) => String(Math.round(v))} allowDecimals={false} tick={{ fontSize: 9, fill: '#a8a29e' }} tickLine={false} axisLine={false} />
               <YAxis tickFormatter={fmtAxis} tick={{ fontSize: 9, fill: '#a8a29e' }} tickLine={false} axisLine={false} width={58} />
-              <Tooltip formatter={(v: any) => [fmtINR(v), 'Monthly net']} labelFormatter={(l: any) => `Year ${l}`} />
+              <Tooltip formatter={(v: any) => [fmtINR(v), 'Monthly net']} labelFormatter={(l: any) => `Year ${Math.round(l)}`} />
               <ReferenceLine y={0} stroke="#e7e5e4" />
               <Bar dataKey="netFlow" name="Monthly net" radius={[2,2,0,0]}>
-                {chartData.map((d, i) => <Cell key={i} fill={((d.netFlow as number) ?? 0) >= 0 ? '#10b981' : '#ef4444'} fillOpacity={0.75} />)}
+                {chartData.filter(d => d.netFlow != null).map((d, i) => <Cell key={i} fill={((d.netFlow as number) ?? 0) >= 0 ? '#10b981' : '#ef4444'} fillOpacity={0.75} />)}
               </Bar>
             </ComposedChart>
           </ResponsiveContainer>
