@@ -7,11 +7,64 @@ import { loadData, saveData, DEFAULT_DATA } from '../lib/storage'
 import { nanoid } from '../lib/nanoid'
 import { refreshAllPrices } from '../lib/livePrice'
 
+// Build a monthly snapshot from live holdings, carrying forward non-market
+// buckets (cash, real estate) from the previous snapshot. Used both on app
+// load and on manual refresh so the growth history builds automatically.
+function snapshotFromHoldings(prev: AppData): AppData {
+  const now = new Date().toISOString().slice(0, 7)
+  const latest = prev.snapshots.length
+    ? [...prev.snapshots].sort((a, b) => a.date.localeCompare(b.date)).at(-1)
+    : undefined
+
+  if (prev.holdings.length === 0) return prev
+
+  const byClass: Record<string, number> = {}
+  let brokerage = 0
+  let retirement = 0
+  for (const h of prev.holdings) {
+    const cls = h.assetClass ?? (h.type === 'retirement' ? 'Retirement' : 'Other')
+    byClass[cls] = (byClass[cls] ?? 0) + h.value
+    if (h.type === 'retirement') retirement += h.value
+    else brokerage += h.value
+  }
+
+  // Only write a snapshot if the month changed or values moved — avoids
+  // clobbering an existing same-month snapshot with identical data.
+  const existingThisMonth = prev.snapshots.find(s => s.date === now)
+  if (existingThisMonth) {
+    const isSame = Math.abs((existingThisMonth.assets.brokerage ?? 0) - brokerage) < 1
+      && Math.abs((existingThisMonth.assets.retirement ?? 0) - retirement) < 1
+    if (isSame) return prev
+  }
+
+  const snap: NetWorthSnapshot = {
+    id: existingThisMonth?.id ?? nanoid(),
+    date: now,
+    assets: {
+      checking:   latest?.assets.checking   ?? 0,
+      savings:    latest?.assets.savings     ?? 0,
+      brokerage:  Math.round(brokerage),
+      retirement: Math.round(retirement),
+      realEstate: latest?.assets.realEstate  ?? 0,
+      other:      Math.round(byClass['Other'] ?? 0),
+    },
+    liabilities: latest?.liabilities ?? { mortgage: 0, studentLoans: 0, creditCards: 0, autoLoans: 0, other: 0 },
+    breakdown: Object.fromEntries(Object.entries(byClass).map(([k, v]) => [k, Math.round(v)])),
+  }
+
+  const snapshots = existingThisMonth
+    ? prev.snapshots.map(s => s.id === existingThisMonth.id ? snap : s)
+    : [...prev.snapshots, snap]
+
+  return { ...prev, snapshots }
+}
+
 interface AppContextValue {
   data:        AppData
   loading:     boolean
   addSnapshot:          (s: Omit<NetWorthSnapshot, 'id'>) => void
   addOrUpdateSnapshot:  (s: Omit<NetWorthSnapshot, 'id'>) => void
+  captureSnapshot:      () => void
   addTransaction:    (t: Omit<Transaction, 'id'>)      => void
   deleteTransaction: (id: string)                      => void
   addHolding:        (h: Omit<Holding, 'id'>)        => void
@@ -45,7 +98,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setData(d)
       latestData.current = d
       setLoading(false)
-      // Auto-refresh prices on load if holdings exist
+      // Auto-refresh prices on load if holdings exist, then capture a monthly
+      // snapshot so the wealth history builds automatically over time.
       if (d.holdings.length > 0) {
         refreshAllPrices(d.holdings, () => {}, (id, patch) => {
           const current = latestData.current
@@ -53,6 +107,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
           latestData.current = updated
           setData(updated)
           saveData(updated).catch(() => {})
+        }).then(result => {
+          // Capture a snapshot if anything moved — builds history automatically
+          if (result.updated > 0) {
+            const snap = snapshotFromHoldings(latestData.current)
+            latestData.current = snap
+            setData(snap)
+            saveData(snap).catch(() => {})
+          }
         }).catch(() => {})
       }
     })
@@ -100,6 +162,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       update({ ...get(), snapshots: [...get().snapshots, { ...s, id: nanoid() }] })
     }
   }
+
+  // Capture a fresh monthly snapshot from current holdings (builds history over time)
+  const captureSnapshot = useCallback(() => {
+    const snap = snapshotFromHoldings(get())
+    update(snap)
+  }, [update])
 
   const addTransaction    = (t: Omit<Transaction, 'id'>) =>
     update({ ...get(), transactions: [...get().transactions, { ...t, id: nanoid() }] })
@@ -168,7 +236,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   return (
     <AppContext.Provider value={{
       data, loading,
-      addSnapshot, addOrUpdateSnapshot,
+      addSnapshot, addOrUpdateSnapshot, captureSnapshot,
       addTransaction, deleteTransaction,
       addHolding, replaceHoldings, upsertHoldings, updateHolding, deleteHolding,
       addDebt, updateDebt, deleteDebt,
