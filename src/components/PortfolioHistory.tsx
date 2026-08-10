@@ -23,11 +23,6 @@ function deduplicate(snapshots: any[]): any[] {
   return Array.from(map.values()).sort((a, b) => a.date.localeCompare(b.date))
 }
 
-// A snapshot has real equity data (not EPF-only)
-function hasEquity(s: any): boolean {
-  return s.assets.brokerage > 0 || s.assets.other > 0
-}
-
 // Forward-fill ALL asset types — any field that was non-zero in a previous
 // import is carried forward until a newer import overrides it.
 // This means crypto, RSU, real estate, cash all persist across months
@@ -254,9 +249,9 @@ export default function PortfolioHistory() {
     return applyCarryForward(deduped)
   }, [data.snapshots])
 
-  // Need at least 2 months with real equity to show history
-  const equityMonths = rows.filter(r => hasEquity(r.s) || r.carried).length
-  const hasHistory   = equityMonths >= 2 && rows.length >= 2
+  // Any 2 snapshots over time = a history line. No longer requires "equity",
+  // so a bank/manual first snapshot in June still anchors the chart.
+  const hasHistory = rows.length >= 2
 
   if (nwNow <= 0 && rows.length === 0) return null
 
