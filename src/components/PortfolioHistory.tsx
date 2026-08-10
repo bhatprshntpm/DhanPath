@@ -243,9 +243,12 @@ export default function PortfolioHistory() {
     return latest ? (totalAssets(latest) - totalLiabilities(latest)) : 0
   }, [data])
 
-  // Deduped snapshots with carry-forward applied
+  // Deduped snapshots with carry-forward applied — only up to the current
+  // month. Future-dated snapshots (e.g. projected EPF) are not "history".
   const rows = useMemo(() => {
-    const deduped = deduplicate(data.snapshots)
+    const currentMonth = new Date().toISOString().slice(0, 7)
+    const pastOnly = data.snapshots.filter(s => s.date <= currentMonth)
+    const deduped = deduplicate(pastOnly)
     return applyCarryForward(deduped)
   }, [data.snapshots])
 
