@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
-import { Plus, Trash2, ChevronDown, ChevronUp, Pencil, Check, X, TrendingUp } from 'lucide-react'
+import { Plus, Trash2, ChevronDown, ChevronUp, Pencil, Check, X } from 'lucide-react'
 import { useApp } from '../context/AppContext'
-import { fmtINR, projectLifetimeNoGoals, requiredMonthlySIP } from '../lib/calc'
+import { fmtINR, projectLifetimeNoGoals } from '../lib/calc'
 import EmptyState from './EmptyState'
 import type { Goal } from '../types'
 
@@ -167,15 +167,6 @@ export default function GoalsCard() {
     baseline ? projectLifetimeNoGoals(nwNow, settings, baseline) : [],
   [baseline, nwNow, settings])
 
-  const requiredSIP = useMemo(() => {
-    if (!baseline || data.goals.filter(g => g.enabled).length === 0) return null
-    return requiredMonthlySIP(nwNow, settings, baseline, data.goals.filter(g => g.enabled))
-  }, [baseline, nwNow, settings, data.goals])
-
-  const currentSIP = baseline?.assumptions.extraMonthlySavings ?? 0
-  const sipGap = requiredSIP != null ? Math.max(requiredSIP - currentSIP, 0) : 0
-  const enabledGoals = data.goals.filter(g => g.enabled)
-
   function goalFunding(g: Goal) {
     const yrsAway         = Math.max(g.targetAge - settings.currentAge, 0)
     const inf             = settings.inflationRate / 100
@@ -228,31 +219,6 @@ export default function GoalsCard() {
           </button>
         </div>
       </div>
-
-      {/* SIP headline — shown when there are enabled goals */}
-      {enabledGoals.length > 0 && requiredSIP != null && (
-        <div className={`flex items-center gap-3 rounded-xl px-4 py-3 border ${
-          sipGap > 0
-            ? 'bg-amber-50 border-amber-200'
-            : 'bg-emerald-50 border-emerald-200'
-        }`}>
-          <TrendingUp size={18} className={sipGap > 0 ? 'text-amber-500' : 'text-emerald-500'} />
-          <div>
-            <p className={`text-sm font-bold ${sipGap > 0 ? 'text-amber-800' : 'text-emerald-800'}`}>
-              Invest {fmtINR(requiredSIP)}/mo towards {enabledGoals.length} goal{enabledGoals.length !== 1 ? 's' : ''}
-            </p>
-            {sipGap > 0 ? (
-              <p className="text-xs text-amber-600 mt-0.5">
-                You're investing {fmtINR(currentSIP)}/mo now — need {fmtINR(sipGap)}/mo more
-              </p>
-            ) : (
-              <p className="text-xs text-emerald-600 mt-0.5">
-                Your current SIP of {fmtINR(currentSIP)}/mo covers all goals
-              </p>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* Inline edit form */}
       {editingId && (() => {
