@@ -271,21 +271,38 @@ export async function classifyHolding(
   // ── Layer 1: ISIN prefix ──────────────────────────────────────────────────
   const isinType = classifyISINPrefix(isin)
 
+  // ── SGB name override — must run BEFORE isin-prefix check ────────────────────
+  // Zerodha imports some SGBs with IN0020 ISINs (classified as g_sec by prefix),
+  // but the holding name always starts with "SGB" or ends with "-GB".
+  // Check the name first so these land in Gold, not Debt.
+  if (/^sgb\w|-gb\b|sovereign\s*gold\s*bond/i.test(name))
+    return { assetClass: 'Gold', subType: 'Sovereign Gold Bond', source: 'name-pattern' }
+
   if (isinType === 'g_sec') return { assetClass: 'Debt',  subType: 'Government Securities', source: 'isin-prefix' }
   if (isinType === 'sgb')   return { assetClass: 'Gold',  subType: 'Sovereign Gold Bond',   source: 'isin-prefix' }
 
-  // ── Layer 1.5: Name-pattern override for ambiguous SEBI categories ──────────
-  // FoF (domestic) can be Gold, Silver, or International — SEBI lumps them together.
-  // Disambiguate by fund name before SEBI lookup runs.
+  // ── Layer 1.5: Name-pattern overrides — run BEFORE SEBI category lookup ──────
   const nameLower = name.toLowerCase()
   const isFoF = /fund.of.fund|fof/i.test(instrumentType)
-  if (isFoF || isinType === 'mutual_fund') {
+
+  if (isinType === 'mutual_fund' || isFoF) {
     if (/\bgold\b/i.test(name))
       return { assetClass: 'Gold',          subType: 'Gold Fund',          source: 'name-pattern' }
     if (/\bsilver\b/i.test(name))
       return { assetClass: 'Gold',          subType: 'Silver Fund',        source: 'name-pattern' }
-    if (isFoF && /international|overseas|us equity|nasdaq|s&p 500|global|world|foreign/i.test(nameLower))
+
+    // International: specific index names apply to ALL mutual funds, not just FoF.
+    // "Motilal Oswal S&P 500 Index Fund" is a direct index fund, not FoF, but clearly international.
+    if (/s&p\s*500|nasdaq(?:\s*100)?|hang\s*seng|hangseng|greater\s*china|ftse\s*100|dow\s*jones|us\s*equity/i.test(nameLower))
       return { assetClass: 'International', subType: 'International Fund', source: 'name-pattern' }
+
+    // Broader international pattern — keep limited to FoF to avoid false positives.
+    if (isFoF && /international|overseas|global|world|foreign/i.test(nameLower))
+      return { assetClass: 'International', subType: 'International Fund', source: 'name-pattern' }
+
+    // Debt index funds misclassified under "Others - Index Funds/ETFs".
+    if (/\bgilt\b|crisil\s*ibx|\bcpse\s*bond\b|\bsdl\b.*index|g-?sec.*index/i.test(nameLower))
+      return { assetClass: 'Debt', subType: 'Gilt', source: 'name-pattern' }
   }
 
   // ── Layer 2: SEBI category (from Zerodha Instrument Type column) ──────────

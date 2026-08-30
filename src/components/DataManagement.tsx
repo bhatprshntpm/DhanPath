@@ -50,6 +50,103 @@ function DropZone({ accept, color, onFile, label }: {
 }
 
 // ─── Zerodha ──────────────────────────────────────────────────────────────────
+// ─── Manual reclassify: search any holding and override its category ─────────
+function ManualReclassifyCard() {
+  const { data, updateHolding } = useApp()
+  const [open,   setOpen]   = useState(false)
+  const [query,  setQuery]  = useState('')
+  const [picked, setPicked] = useState<string | null>(null)
+  const [draft,  setDraft]  = useState({ assetClass: 'Equity', subType: 'Large Cap' })
+
+  const results = query.trim().length > 1
+    ? data.holdings
+        .filter(h => h.name.toLowerCase().includes(query.toLowerCase()))
+        .slice(0, 6)
+    : []
+
+  const pickedHolding = picked ? data.holdings.find(h => h.id === picked) : null
+
+  function select(h: typeof data.holdings[number]) {
+    setPicked(h.id)
+    setDraft({
+      assetClass: h.assetClass ?? 'Equity',
+      subType:    h.subType    ?? '',
+    })
+  }
+
+  function save() {
+    if (!picked) return
+    updateHolding(picked, { ...draft, userClassified: true })
+    setPicked(null); setQuery(''); setOpen(false)
+  }
+
+  const subtypeOpts = SUBTYPES[draft.assetClass] ?? []
+
+  if (!open) {
+    return (
+      <button onClick={() => setOpen(true)}
+        className="text-[10px] text-surface-400 hover:text-surface-600 underline underline-offset-2 transition-colors">
+        Reclassify any holding
+      </button>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-3 p-3 rounded-xl border border-surface-200 bg-surface-50">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-semibold text-surface-700">Reclassify any holding</p>
+        <button onClick={() => { setOpen(false); setPicked(null); setQuery('') }}
+          className="text-surface-400 hover:text-surface-600">
+          <X size={13} />
+        </button>
+      </div>
+
+      {!pickedHolding ? (
+        <div className="flex flex-col gap-1.5">
+          <input value={query} onChange={e => { setQuery(e.target.value); setPicked(null) }}
+            placeholder="Search by name…"
+            className="text-xs border border-surface-200 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-amber-400 w-full" />
+          {results.length > 0 && (
+            <div className="flex flex-col divide-y divide-surface-100 border border-surface-200 rounded-lg bg-white overflow-hidden">
+              {results.map(h => (
+                <button key={h.id} onClick={() => select(h)}
+                  className="flex items-center justify-between px-2.5 py-2 text-left hover:bg-surface-50 transition-colors">
+                  <span className="text-xs text-surface-800 truncate flex-1">{h.name}</span>
+                  <span className="text-[10px] text-surface-400 ml-2 shrink-0">{h.assetClass} / {h.subType}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="flex flex-col gap-2">
+          <div className="flex items-start justify-between gap-2">
+            <p className="text-xs font-medium text-surface-800 leading-tight">{pickedHolding.name}</p>
+            <button onClick={() => { setPicked(null); setQuery('') }}
+              className="text-[10px] text-surface-400 hover:text-surface-600 shrink-0 underline">change</button>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <select value={draft.assetClass}
+              onChange={e => setDraft({ assetClass: e.target.value, subType: SUBTYPES[e.target.value]?.[0] ?? '' })}
+              className="text-xs border border-surface-200 rounded-lg px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-amber-400">
+              {ASSET_CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <select value={draft.subType}
+              onChange={e => setDraft(d => ({ ...d, subType: e.target.value }))}
+              className="text-xs border border-surface-200 rounded-lg px-2 py-1 bg-white flex-1 focus:outline-none focus:ring-1 focus:ring-amber-400">
+              {subtypeOpts.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+            <button onClick={save}
+              className="px-3 py-1 rounded-lg bg-amber-500 text-white text-xs font-medium hover:bg-amber-600 transition-colors">
+              Save
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Review card for classification conflicts ─────────────────────────────────
 function ConflictReviewCard() {
   const { data, updateHolding } = useApp()
@@ -383,6 +480,7 @@ function ZerodhaContent() {
           <div className="mt-3 flex flex-col gap-3">
             <ConflictReviewCard />
             <ClassifyMFCard />
+            <ManualReclassifyCard />
           </div>
         </div>
       )}
