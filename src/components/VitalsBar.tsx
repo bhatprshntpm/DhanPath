@@ -3,7 +3,7 @@ import { TrendingUp, TrendingDown } from 'lucide-react'
 import { useApp } from '../context/AppContext'
 import {
   netWorth, fmtINR, trueFireAge,
-  totalAssets, totalLiabilities, requiredMonthlySIP,
+  totalAssets, totalLiabilities, requiredMonthlySIP, sipToHitFIREAge,
 } from '../lib/calc'
 
 export default function VitalsBar() {
@@ -64,6 +64,17 @@ export default function VitalsBar() {
     return trueFireAge(nwNow, settings, effectiveScenario, goals.filter(g => g.enabled))
   }, [effectiveScenario, nwNow, settings, goals])
 
+  // How much more to invest to hit the TARGET retirement age
+  const targetAge = settings.retirementAge
+  const gapYears  = fireAge !== null ? fireAge - targetAge : null
+  const sipToClose = useMemo(() => {
+    if (!effectiveScenario || !gapYears || gapYears <= 0) return null
+    return sipToHitFIREAge(targetAge, nwNow, settings, effectiveScenario, goals.filter(g => g.enabled))
+  }, [effectiveScenario, gapYears, targetAge, nwNow, settings, goals])
+  const currentInvestmentForGap = settings.kiteMonthlyInvestment
+    ?? (settings.existingSIP > 0 ? settings.existingSIP : 0)
+  const additionalNeeded = sipToClose !== null ? Math.max(0, sipToClose - currentInvestmentForGap) : null
+
   const requiredSIP = useMemo(() => {
     const enabled = goals.filter(g => g.enabled)
     if (!baseline || enabled.length === 0) return null
@@ -93,16 +104,35 @@ export default function VitalsBar() {
       {/* Divider */}
       <div className="hidden sm:block w-px h-10 bg-surface-100" />
 
-      {/* FIRE age */}
+      {/* FIRE age — shows target vs actual when they differ */}
       {fireAge && (
         <div>
           <p className="text-[10px] uppercase tracking-widest font-semibold text-surface-300 mb-0.5">Financial Independence</p>
-          <p className="text-2xl font-bold text-amber-500 leading-none">Age {fireAge}</p>
-          <p className="text-xs text-surface-400 mt-1.5">
-            {fireAge - settings.currentAge > 0
-              ? `${fireAge - settings.currentAge} years away`
-              : 'You\'ve reached it'}
-          </p>
+          {gapYears && gapYears > 0 ? (
+            // Target not yet funded — show both sides
+            <>
+              <div className="flex items-baseline gap-2">
+                <p className="text-2xl font-bold text-amber-500 leading-none">Age {fireAge}</p>
+                <p className="text-xs text-surface-400 line-through">Target: {targetAge}</p>
+              </div>
+              <p className="text-xs mt-1.5 text-amber-600">
+                {gapYears} yr{gapYears !== 1 ? 's' : ''} past target
+                {additionalNeeded != null && additionalNeeded > 0
+                  ? ` · +${fmtINR(additionalNeeded)}/mo to retire at ${targetAge}`
+                  : ''}
+              </p>
+            </>
+          ) : (
+            // On track or ahead
+            <>
+              <p className="text-2xl font-bold text-amber-500 leading-none">Age {fireAge}</p>
+              <p className="text-xs text-surface-400 mt-1.5">
+                {fireAge - settings.currentAge > 0
+                  ? `${fireAge - settings.currentAge} years away${fireAge < targetAge ? ` · ${targetAge - fireAge} yrs ahead of target` : ''}`
+                  : "You've reached it"}
+              </p>
+            </>
+          )}
         </div>
       )}
 

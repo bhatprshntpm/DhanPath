@@ -283,6 +283,34 @@ export function trueFireAge(
 }
 
 
+/** Minimum monthly investment to achieve FIRE at or before `targetAge`.
+ *  Returns null if not achievable within maxSIP.
+ *  Returns the current SIP if the target is already on track. */
+export function sipToHitFIREAge(
+  targetAge: number,
+  currentNetWorth: number,
+  settings: Settings,
+  scenario: Scenario,
+  goals: Goal[],
+  maxSIP = 500_000,
+): number | null {
+  function achieves(sip: number): boolean {
+    const s = { ...scenario, assumptions: { ...scenario.assumptions, extraMonthlySavings: sip } }
+    const age = trueFireAge(currentNetWorth, settings, s, goals)
+    return age !== null && age <= targetAge
+  }
+  const curSIP = scenario.assumptions.extraMonthlySavings ?? 0
+  if (achieves(curSIP)) return curSIP   // already on track
+  if (!achieves(maxSIP)) return null     // not achievable even at max
+
+  let lo = curSIP, hi = maxSIP
+  for (let i = 0; i < 20; i++) {
+    const mid = (lo + hi) / 2
+    if (achieves(mid)) hi = mid; else lo = mid
+  }
+  return Math.ceil(hi / 1000) * 1000   // round up to nearest ₹1k
+}
+
 export function requiredMonthlySIP(
   currentNetWorth: number,
   settings: Settings,

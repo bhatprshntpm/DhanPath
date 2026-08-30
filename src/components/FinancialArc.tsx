@@ -7,7 +7,7 @@ import {
 import { ChevronDown, ChevronRight, RotateCcw, Zap } from 'lucide-react'
 import { useApp } from '../context/AppContext'
 import {
-  projectLifetime, trueFireAge,
+  projectLifetime, trueFireAge, sipToHitFIREAge,
   fmtINR, totalAssets, totalLiabilities,
 } from '../lib/calc'
 
@@ -371,6 +371,16 @@ export default function FinancialArc({ onOpenSettings }: { onOpenSettings?: () =
     ? (projCur.find(p => p.year === fireYearCur)?.value ?? 0)
     : 0
 
+  // Gap between target retirement age and actual FIRE age.
+  // If fireAgeCur > settings.retirementAge, the user's target is not yet funded.
+  const targetAge  = settings.retirementAge
+  const gapYears   = fireAgeCur !== null ? fireAgeCur - targetAge : null   // positive = behind target
+  const sipToClose = useMemo(() => {
+    if (!curScenario || !gapYears || gapYears <= 0) return null
+    return sipToHitFIREAge(targetAge, nwNow, settings, curScenario, goals.filter(g => g.enabled))
+  }, [curScenario, gapYears, targetAge, nwNow, settings, goals])
+  const additionalSipNeeded = sipToClose !== null ? Math.max(0, sipToClose - activeSIP) : null
+
   // Hover point
   const hoverPoint   = hoverYear !== null ? projCur.find(p => p.year === hoverYear) ?? null : null
   const hoverPrev    = hoverYear !== null ? projCur.find(p => p.year === hoverYear - 1) ?? null : null
@@ -378,15 +388,28 @@ export default function FinancialArc({ onOpenSettings }: { onOpenSettings?: () =
     ? Math.round(hoverPoint.value - hoverPrev.value - hoverPoint.netFlow * 12)
     : null
 
-  // Plain-English summary
+  // Plain-English summary — shows target vs actual FIRE age when they differ
   const fireSummary = (() => {
     if (!fireAgeCur) return null
+    const inf              = (settings.inflationRate ?? 6) / 100
+    const monthlyNow       = settings.monthlyExpenses ?? 0
+    const monthlyAtRetire  = Math.round(monthlyNow * Math.pow(1 + inf, Math.max(fireAgeCur - settings.currentAge, 0)))
+    const corpus           = fmtINR(corpusAtFire)
+
+    if (fireAgeCur <= settings.currentAge) {
+      return `You've reached Financial Independence. Your ${corpus} corpus funds ${fmtINR(monthlyAtRetire)}/mo until age ${settings.lifeExpectancy}.`
+    }
+
+    if (gapYears && gapYears > 0) {
+      // Target not yet achievable — show both sides
+      const extra = additionalSipNeeded != null && additionalSipNeeded > 0
+        ? `Invest +${fmtINR(additionalSipNeeded)}/mo more to retire at ${targetAge}.`
+        : `Your target age ${targetAge} needs a higher savings rate — adjust in Settings.`
+      return `On current savings, retire at age ${fireAgeCur} (${gapYears} yr${gapYears !== 1 ? 's' : ''} past your target of ${targetAge}). ` + extra
+    }
+
+    // On track or ahead of target
     const yearsAway = fireAgeCur - settings.currentAge
-    const inf = (settings.inflationRate ?? 6) / 100
-    const monthlyNow = settings.monthlyExpenses ?? 0
-    const monthlyAtRetire = Math.round(monthlyNow * Math.pow(1 + inf, Math.max(yearsAway, 0)))
-    const corpus = fmtINR(corpusAtFire)
-    if (yearsAway <= 0) return `You've reached Financial Independence. Your ${corpus} corpus funds ${fmtINR(monthlyAtRetire)}/mo until age ${settings.lifeExpectancy}.`
     return `Retire at age ${fireAgeCur} (${yearsAway} yr${yearsAway !== 1 ? 's' : ''} away) with ${corpus}. Your ${fmtINR(monthlyNow)}/mo expenses grow to ${fmtINR(monthlyAtRetire)}/mo by retirement — corpus sustains until age ${settings.lifeExpectancy}.`
   })()
 
