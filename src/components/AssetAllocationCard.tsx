@@ -66,6 +66,42 @@ const CLASSIFY_SUBTYPES: Record<string,string[]> = {
   Other:           ['Index ETF','Commodity ETF','Other'],
 }
 
+// ── Instrument-type grouping within each asset class ─────────────────────────
+// Adds a second level: e.g. Equity → Direct Stocks / Mutual Funds / ETFs
+// Detection uses ISIN prefix (INE = stock, INF = MF/ETF) and subType.
+function instrumentCategory(h: Holding, cls: string): string {
+  const isin = (h.ticker ?? '').toUpperCase()
+  const sub  = h.subType ?? ''
+  const MF_ETF_SUBS = new Set(['Index ETF', 'Equity ETF', 'Gold ETF', 'Debt ETF'])
+
+  if (cls === 'Equity') {
+    if (isin.startsWith('INE')) return 'Direct Stocks'
+    if (isin.startsWith('INF')) return MF_ETF_SUBS.has(sub) ? 'ETFs' : 'Mutual Funds'
+    return 'Direct Stocks'
+  }
+  if (cls === 'Debt') {
+    if (sub === 'Fixed Deposit') return 'Fixed Deposits'
+    if (isin.startsWith('INF')) return 'Debt Mutual Funds'
+    return 'Bonds & G-Sec'
+  }
+  if (cls === 'Gold') {
+    if (sub === 'Sovereign Gold Bond') return 'Sovereign Gold Bonds'
+    return MF_ETF_SUBS.has(sub) ? 'ETFs' : 'Mutual Funds'
+  }
+  if (cls === 'International') {
+    return h.type === 'stock' ? 'US Stocks / RSUs' : 'Mutual Funds'
+  }
+  return ''   // no sub-grouping for EPF, Cash, Crypto
+}
+
+// Preferred display order for instrument categories per asset class
+const INSTRUMENT_ORDER: Record<string, string[]> = {
+  Equity:        ['Direct Stocks', 'Mutual Funds', 'ETFs'],
+  Debt:          ['Fixed Deposits', 'Debt Mutual Funds', 'Bonds & G-Sec'],
+  Gold:          ['Sovereign Gold Bonds', 'ETFs', 'Mutual Funds'],
+  International: ['US Stocks / RSUs', 'Mutual Funds'],
+}
+
 function InlineClassifyEditor({ h, onSave, onCancel }: {
   h: Holding
   onSave: (patch: Partial<Holding>) => void
@@ -489,68 +525,98 @@ export default function AssetAllocationCard() {
                   {/* Holdings drill-down */}
                   {isOpen && holdings.length > 0 && (
                     <div className="ml-5 mb-2 flex flex-col gap-0.5 animate-fade-up">
-                      {/* Sub-type groups */}
                       {(() => {
-                        const bySubType: Record<string, Holding[]> = {}
+                        // Group holdings by instrument category (Stocks / MFs / ETFs)
+                        // then by subType within each category.
+                        const byCategory: Record<string, Holding[]> = {}
                         holdings.forEach(h => {
-                          const sub = holdingSubType(h);
-                          (bySubType[sub] = bySubType[sub] ?? []).push(h)
+                          const cat = instrumentCategory(h, cls) || '__flat__'
+                          ;(byCategory[cat] = byCategory[cat] ?? []).push(h)
                         })
-                        return Object.entries(bySubType).map(([sub, items]) => (
-                          <div key={sub} className="flex flex-col">
-                            <p className="text-[9px] uppercase tracking-widest font-semibold text-surface-300 mt-2 mb-1">{sub}</p>
-                            {items
-                              .sort((a, b) => b.value - a.value)
-                              .map(h => {
-                                const ret       = h.costBasis > 0 ? ((h.value - h.costBasis) / h.costBasis) * 100 : 0
-                                const needsReview = h.subType === 'Mutual Fund' || !!h.classificationConflict
-                                const isEditing = editingId === h.id
-                                return (
-                                  <div key={h.id}>
-                                    <div className="flex items-center gap-2 py-1.5 border-b border-surface-50 group">
-                                      {/* Review dot */}
-                                      {needsReview && (
-                                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${h.classificationConflict ? 'bg-violet-400' : 'bg-amber-400'}`} />
-                                      )}
-                                      <div className="flex-1 min-w-0">
-                                        <p className="text-xs font-medium text-surface-800 truncate">{h.name}</p>
-                                        <p className="text-[10px] text-surface-300 font-mono truncate">
-                                          {h.qty != null && h.qty > 0
-                                            ? `${h.qty % 1 === 0 ? h.qty : h.qty.toFixed(3)} units${h.lastPrice ? ` · ₹${h.lastPrice.toLocaleString('en-IN', { maximumFractionDigits: 0 })} each` : ''}`
-                                            : h.ticker || ''}
-                                        </p>
-                                      </div>
-                                      <div className="text-right shrink-0">
-                                        <p className="text-xs font-semibold font-mono text-surface-800">{fmtINR(h.value)}</p>
-                                        {h.costBasis > 0 && (
-                                          <p className={`text-[10px] font-medium ${ret >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
-                                            {ret >= 0 ? '+' : ''}{ret.toFixed(1)}%
-                                          </p>
-                                        )}
-                                      </div>
-                                      <button
-                                        onClick={() => setEditingId(isEditing ? null : h.id)}
-                                        title="Reclassify"
-                                        className={`ml-1 transition-colors ${isEditing ? 'text-amber-500' : 'text-surface-400 hover:text-amber-500'}`}>
-                                        <Pencil size={11}/>
-                                      </button>
-                                      <button onClick={() => deleteHolding(h.id)}
-                                        className="opacity-0 group-hover:opacity-100 text-surface-400 hover:text-rose-400 transition-all ml-0.5">
-                                        <Trash2 size={11}/>
-                                      </button>
-                                    </div>
-                                    {isEditing && (
-                                      <InlineClassifyEditor
-                                        h={h}
-                                        onSave={patch => { updateHolding(h.id, patch); setEditingId(null) }}
-                                        onCancel={() => setEditingId(null)}
-                                      />
-                                    )}
-                                  </div>
-                                )
-                              })}
-                          </div>
-                        ))
+
+                        const order = INSTRUMENT_ORDER[cls] ?? []
+                        const cats  = [
+                          ...order.filter(c => byCategory[c]),
+                          ...Object.keys(byCategory).filter(c => c !== '__flat__' && !order.includes(c)),
+                          ...(byCategory['__flat__'] ? ['__flat__'] : []),
+                        ]
+
+                        // Reusable holding row renderer
+                        const HoldingRow = (h: Holding) => {
+                          const ret         = h.costBasis > 0 ? ((h.value - h.costBasis) / h.costBasis) * 100 : 0
+                          const needsReview = h.subType === 'Mutual Fund' || !!h.classificationConflict
+                          const isEditing   = editingId === h.id
+                          return (
+                            <div key={h.id}>
+                              <div className="flex items-center gap-2 py-1.5 border-b border-surface-50 group">
+                                {needsReview && (
+                                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${h.classificationConflict ? 'bg-violet-400' : 'bg-amber-400'}`} />
+                                )}
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-xs font-medium text-surface-800 truncate">{h.name}</p>
+                                  <p className="text-[10px] text-surface-400 font-mono truncate">
+                                    {h.qty != null && h.qty > 0
+                                      ? `${h.qty % 1 === 0 ? h.qty : h.qty.toFixed(3)} units${h.lastPrice ? ` · ₹${h.lastPrice.toLocaleString('en-IN', { maximumFractionDigits: 0 })} each` : ''}`
+                                      : h.ticker || ''}
+                                  </p>
+                                </div>
+                                <div className="text-right shrink-0">
+                                  <p className="text-xs font-semibold font-mono text-surface-800">{fmtINR(h.value)}</p>
+                                  {h.costBasis > 0 && (
+                                    <p className={`text-[10px] font-medium ${ret >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
+                                      {ret >= 0 ? '+' : ''}{ret.toFixed(1)}%
+                                    </p>
+                                  )}
+                                </div>
+                                <button onClick={() => setEditingId(isEditing ? null : h.id)} title="Reclassify"
+                                  className={`ml-1 transition-colors ${isEditing ? 'text-amber-500' : 'text-surface-400 hover:text-amber-500'}`}>
+                                  <Pencil size={11}/>
+                                </button>
+                                <button onClick={() => deleteHolding(h.id)}
+                                  className="opacity-0 group-hover:opacity-100 text-surface-400 hover:text-rose-400 transition-all ml-0.5">
+                                  <Trash2 size={11}/>
+                                </button>
+                              </div>
+                              {isEditing && (
+                                <InlineClassifyEditor h={h}
+                                  onSave={patch => { updateHolding(h.id, patch); setEditingId(null) }}
+                                  onCancel={() => setEditingId(null)} />
+                              )}
+                            </div>
+                          )
+                        }
+
+                        return cats.map(cat => {
+                          const catHoldings = byCategory[cat] ?? []
+                          const catTotal    = catHoldings.reduce((a, h) => a + h.value, 0)
+
+                          // Group by subType within this category
+                          const bySubType: Record<string, Holding[]> = {}
+                          catHoldings.forEach(h => {
+                            const sub = holdingSubType(h);
+                            (bySubType[sub] = bySubType[sub] ?? []).push(h)
+                          })
+
+                          return (
+                            <div key={cat}>
+                              {/* Instrument category header */}
+                              {cat !== '__flat__' && (
+                                <div className="flex items-center justify-between mt-3 mb-1 border-t border-surface-50 pt-2">
+                                  <p className="text-[10px] font-semibold text-surface-600 uppercase tracking-widest">{cat}</p>
+                                  <p className="text-[10px] text-surface-400 font-mono">{fmtINR(catTotal)}</p>
+                                </div>
+                              )}
+
+                              {/* SubType groups within category */}
+                              {Object.entries(bySubType).map(([sub, items]) => (
+                                <div key={sub} className="flex flex-col">
+                                  <p className="text-[9px] uppercase tracking-widest font-semibold text-surface-400 mt-1.5 mb-0.5">{sub}</p>
+                                  {items.sort((a, b) => b.value - a.value).map(HoldingRow)}
+                                </div>
+                              ))}
+                            </div>
+                          )
+                        })
                       })()}
                     </div>
                   )}
