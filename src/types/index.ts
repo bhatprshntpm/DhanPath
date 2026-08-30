@@ -115,9 +115,12 @@ export interface Settings {
   realEstateReturn:    number
   currency: string
   // Zerodha Kite live-sync
-  kiteToken?:              string   // access_token (expires daily at 6:30 AM IST)
-  kiteConnectedAt?:        string   // ISO timestamp of last successful OAuth
-  kiteMonthlyInvestment?:  number   // sum of active Kite SIPs normalised to monthly ₹
+  kiteToken?:              string
+  kiteConnectedAt?:        string
+  kiteMonthlyInvestment?:  number
+  /** Per-device Kite Connect API key — allows different family members to use
+   *  their own Kite Connect app without a code rebuild. Set once via Sources panel. */
+  kiteApiKey?:             string
 }
 
 export interface AppData {

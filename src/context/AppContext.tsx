@@ -112,18 +112,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const latestData            = useRef<AppData>(DEFAULT_DATA)
 
   // ── Capture Kite token from URL fragment after OAuth redirect ──────────────
-  // The Worker redirects to DhanPath as:  /DhanPath/#kite_token=ACCESS_TOKEN
-  // We grab it once, store it, and clean the URL so it's not in browser history.
+  // Worker redirects: /DhanPath/#kite_token=TOKEN&kite_api_key=KEY
+  // Both token and api_key are stored so sync calls use the right credentials.
   useEffect(() => {
     const hash = window.location.hash
     if (!hash.includes('kite_token=')) return
-    const token = new URLSearchParams(hash.slice(1)).get('kite_token')
+    const params = new URLSearchParams(hash.slice(1))
+    const token  = params.get('kite_token')
+    const apiKey = params.get('kite_api_key')
     if (!token) return
-    // Clear the fragment immediately
     window.history.replaceState(null, '', window.location.pathname + window.location.search)
-    // Persist token — will be picked up by the load effect below
     loadData().then(d => {
-      const next = { ...d, settings: { ...d.settings, kiteToken: token, kiteConnectedAt: new Date().toISOString() } }
+      const next = { ...d, settings: { ...d.settings,
+        kiteToken: token,
+        kiteConnectedAt: new Date().toISOString(),
+        // Only persist the api_key if it differs from the build default
+        ...(apiKey ? { kiteApiKey: apiKey } : {}),
+      }}
       saveData(next).catch(() => {})
       latestData.current = next
       setData(next)
@@ -284,12 +289,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Merges into existing DhanPath holdings by ISIN — preserves classification of
   // previously-imported holdings and only updates qty/price/value fields.
   const syncKiteHoldings = useCallback(async (): Promise<{ updated: number; added: number; sips: number }> => {
-    const { kiteToken, kiteConnectedAt } = get().settings
-    if (!isKiteConfigured()) throw new Error('Kite not configured')
+    const { kiteToken, kiteConnectedAt, kiteApiKey } = get().settings
+    if (!isKiteConfigured(kiteApiKey)) throw new Error('Kite not configured')
     if (!kiteToken || !isKiteTokenValid(kiteConnectedAt))
       throw new Error('Kite session expired — please reconnect')
 
-    const { equity, mf, sips } = await fetchKiteSync(kiteToken)
+    const { equity, mf, sips } = await fetchKiteSync(kiteToken, kiteApiKey)
     const current = [...get().holdings]
     let updated = 0, added = 0
     const now = new Date().toISOString()

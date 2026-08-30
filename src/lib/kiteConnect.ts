@@ -6,15 +6,22 @@
  *   VITE_KITE_WORKER_URL — Cloudflare Worker URL
  */
 
-const API_KEY    = import.meta.env.VITE_KITE_API_KEY    as string | undefined
-const WORKER_URL = import.meta.env.VITE_KITE_WORKER_URL as string | undefined
+const DEFAULT_API_KEY = import.meta.env.VITE_KITE_API_KEY    as string | undefined
+const WORKER_URL      = import.meta.env.VITE_KITE_WORKER_URL as string | undefined
 
-export function isKiteConfigured(): boolean {
-  return !!(API_KEY && WORKER_URL)
+export function isKiteConfigured(kiteApiKey?: string): boolean {
+  return !!((kiteApiKey || DEFAULT_API_KEY) && WORKER_URL)
 }
 
-export function kiteOAuthUrl(): string {
-  return `https://kite.zerodha.com/connect/login?api_key=${API_KEY}&v=3`
+/**
+ * Build the Zerodha OAuth URL using the per-user API key.
+ * The matching Kite Connect app must have its redirect URL registered as:
+ *   https://<worker-url>/callback?key=<API_KEY>
+ * so the Worker knows which api_secret to use for the token exchange.
+ */
+export function kiteOAuthUrl(kiteApiKey?: string): string {
+  const apiKey = kiteApiKey || DEFAULT_API_KEY || ''
+  return `https://kite.zerodha.com/connect/login?api_key=${apiKey}&v=3`
 }
 
 /**
@@ -91,13 +98,14 @@ export interface KiteSyncResult {
  * Returns equity holdings, MF holdings, and active SIPs in one round-trip.
  * Throws on network/API error or expired token.
  */
-export async function fetchKiteSync(token: string): Promise<KiteSyncResult> {
+export async function fetchKiteSync(token: string, kiteApiKey?: string): Promise<KiteSyncResult> {
   if (!WORKER_URL) throw new Error('Kite Worker URL not configured')
+  const apiKey = kiteApiKey || DEFAULT_API_KEY
 
   const resp = await fetch(`${WORKER_URL}/api/sync`, {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ token }),
+    body:    JSON.stringify({ token, apiKey }),
   })
 
   if (resp.status === 403) throw new Error('Kite session expired — please reconnect')

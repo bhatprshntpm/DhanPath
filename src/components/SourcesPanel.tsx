@@ -1,12 +1,79 @@
 import { useState, useRef, useEffect } from 'react'
-import { X, Download, Upload, Shield, RotateCcw } from 'lucide-react'
+import { X, Download, Upload, Shield, RotateCcw, Key, Check } from 'lucide-react'
 import { useApp } from '../context/AppContext'
 import { exportData, exportEncrypted, importData, DEFAULT_DATA } from '../lib/storage'
+import { isKiteConfigured } from '../lib/kiteConnect'
 import DataManagement from './DataManagement'
 
 interface SourcesPanelProps {
   open: boolean
   onClose: () => void
+}
+
+/** Per-device Kite API key configuration.
+ *  Set this once on each family member's device — they never need to see it again.
+ *  Leave blank on the main device (uses the build default from env vars). */
+function KiteApiKeySection() {
+  const { data, updateSettings } = useApp()
+  const stored = data.settings.kiteApiKey ?? ''
+  const [draft,   setDraft]   = useState(stored)
+  const [saved,   setSaved]   = useState(false)
+  const [visible, setVisible] = useState(false)
+
+  function save() {
+    updateSettings({ kiteApiKey: draft.trim() || undefined })
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2000)
+  }
+
+  const configured = isKiteConfigured(stored)
+
+  return (
+    <div className="border-t border-surface-100 px-5 py-4">
+      <button onClick={() => setVisible(v => !v)}
+        className="flex items-center gap-2 text-xs font-medium text-surface-500 hover:text-surface-800 transition-colors">
+        <Key size={13} />
+        Kite API key for this device
+        {stored && <span className="text-[10px] text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-full">configured</span>}
+        {!configured && !stored && <span className="text-[10px] text-surface-400">(using app default)</span>}
+      </button>
+
+      {visible && (
+        <div className="mt-3 flex flex-col gap-2 p-3 bg-surface-50 rounded-xl border border-surface-100 animate-fade-up">
+          <p className="text-[10px] text-surface-500 leading-relaxed">
+            For family members using a separate Zerodha account: enter the Kite Connect API key
+            that was created for <strong>this Zerodha account</strong>. Set it once — it's saved
+            in this browser only. Leave blank to use the app's built-in default.
+          </p>
+          <div className="flex items-center gap-2">
+            <input
+              type={visible ? 'text' : 'password'}
+              value={draft}
+              onChange={e => setDraft(e.target.value)}
+              placeholder="e.g. abcdefghij123456"
+              className="input-field text-xs py-1 flex-1 font-mono"
+            />
+            <button onClick={save}
+              className="flex items-center gap-1 px-3 py-1 rounded-lg bg-amber-500 text-white text-xs font-medium hover:bg-amber-600 transition-colors shrink-0">
+              {saved ? <><Check size={11}/> Saved</> : 'Save'}
+            </button>
+          </div>
+          {stored && (
+            <button onClick={() => { setDraft(''); updateSettings({ kiteApiKey: undefined }) }}
+              className="text-[10px] text-rose-500 hover:text-rose-700 text-left transition-colors">
+              Clear — revert to app default
+            </button>
+          )}
+          <p className="text-[10px] text-surface-400">
+            The matching Kite app's redirect URL must be registered as:<br />
+            <code className="bg-surface-100 px-1 rounded">
+              {`${import.meta.env.VITE_KITE_WORKER_URL || '<worker-url>'}/callback?key=${draft || '<api-key>'}`}
+            </code>
+          </p>
+        </div>
+      )}
+    </div>
+  )
 }
 
 export default function SourcesPanel({ open, onClose }: SourcesPanelProps) {
@@ -95,6 +162,9 @@ export default function SourcesPanel({ open, onClose }: SourcesPanelProps) {
         <div className="flex-1 overflow-y-auto">
           {/* Data sources — always expanded */}
           <DataManagement alwaysOpen />
+
+          {/* Per-device Kite API key — set once by admin for each family member */}
+          <KiteApiKeySection />
 
           {/* Backup & Restore */}
           <div className="border-t border-surface-100 px-5 py-4 flex flex-col gap-3">

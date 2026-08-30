@@ -53,7 +53,7 @@ function DropZone({ accept, color, onFile, label }: {
 // ─── Zerodha Kite live-sync ───────────────────────────────────────────────────
 function KiteLiveSync() {
   const { data, syncKiteHoldings, updateSettings } = useApp()
-  const { kiteToken, kiteConnectedAt } = data.settings
+  const { kiteToken, kiteConnectedAt, kiteApiKey } = data.settings
   const [syncing, setSyncing] = useState(false)
   const [result,  setResult]  = useState<{ updated: number; added: number; sips: number } | null>(null)
   const [error,   setError]   = useState<string | null>(null)
@@ -114,7 +114,7 @@ function KiteLiveSync() {
             </button>
           </>
         ) : (
-          <a href={kiteOAuthUrl()} rel="noopener noreferrer"
+          <a href={kiteOAuthUrl(kiteApiKey)} rel="noopener noreferrer"
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 text-white text-xs font-medium hover:bg-amber-600 transition-colors">
             <Zap size={12} />
             {kiteToken ? 'Reconnect Zerodha' : 'Connect Zerodha'}
@@ -209,13 +209,13 @@ function ZerodhaContent() {
   return (
     <div className="flex flex-col gap-4">
       {/* Live Kite sync — only shown when VITE_KITE_API_KEY + VITE_KITE_WORKER_URL are set */}
-      {isKiteConfigured() && (
+      {isKiteConfigured(data.settings.kiteApiKey) && (
         <div>
           <p className="text-[10px] uppercase tracking-widest font-semibold text-surface-400 mb-2">Live sync (demat holdings — stocks, ETFs &amp; MFs)</p>
           <KiteLiveSync />
         </div>
       )}
-      {isKiteConfigured() && <div className="border-t border-surface-100 pt-1"><p className="text-[10px] uppercase tracking-widest font-semibold text-surface-400 mb-2">XLSX import (MFs &amp; full portfolio)</p></div>}
+      {isKiteConfigured(data.settings.kiteApiKey) && <div className="border-t border-surface-100 pt-1"><p className="text-[10px] uppercase tracking-widest font-semibold text-surface-400 mb-2">XLSX import (MFs &amp; full portfolio)</p></div>}
       {zerodhaHoldings.length > 0 && !result && (
         <div className="flex items-center justify-between px-3 py-2 bg-surface-50 rounded-xl border border-surface-100">
           <p className="text-xs text-surface-600">
