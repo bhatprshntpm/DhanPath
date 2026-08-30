@@ -531,11 +531,11 @@ export default function AssetAllocationCard() {
                                       <button
                                         onClick={() => setEditingId(isEditing ? null : h.id)}
                                         title="Reclassify"
-                                        className={`transition-all ml-1 ${isEditing ? 'opacity-100 text-amber-500' : 'opacity-0 group-hover:opacity-100 text-surface-300 hover:text-amber-500'}`}>
+                                        className={`ml-1 transition-colors ${isEditing ? 'text-amber-500' : 'text-surface-400 hover:text-amber-500'}`}>
                                         <Pencil size={11}/>
                                       </button>
                                       <button onClick={() => deleteHolding(h.id)}
-                                        className="opacity-0 group-hover:opacity-100 text-surface-300 hover:text-rose-400 transition-all ml-0.5">
+                                        className="opacity-0 group-hover:opacity-100 text-surface-400 hover:text-rose-400 transition-all ml-0.5">
                                         <Trash2 size={11}/>
                                       </button>
                                     </div>
