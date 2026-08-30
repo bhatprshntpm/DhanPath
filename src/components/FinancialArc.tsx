@@ -364,9 +364,6 @@ export default function FinancialArc({ onOpenSettings }: { onOpenSettings?: () =
     ? Math.round((baseAssump.equityReturn * (baseAssump.equityAllocation / 100) + baseAssump.debtReturn * (1 - baseAssump.equityAllocation / 100)) * 10) / 10
     : 12
   const activeSIP = settings.kiteMonthlyInvestment ?? settings.existingSIP ?? baseAssump?.extraMonthlySavings ?? 0
-  const monthlySavingsTotal = (baseAssump?.monthlyIncome ?? 0) > 0
-    ? (baseAssump!.monthlyIncome - (settings.monthlyExpenses ?? 0)) + activeSIP
-    : activeSIP
   const corpusAtFire = fireYearCur !== null
     ? (projCur.find(p => p.year === fireYearCur)?.value ?? 0)
     : 0
@@ -458,10 +455,16 @@ export default function FinancialArc({ onOpenSettings }: { onOpenSettings?: () =
                       <span className="font-semibold text-surface-800">{fmtINR(corpusAtFire)} <span className="font-normal text-surface-400">— enough to last to age {settings.lifeExpectancy}</span></span>
                       <span className="text-surface-400">Monthly spend at retirement</span>
                       <span className="font-semibold">{fmtINR(inflatedExpenses)}/mo <span className="font-normal text-surface-400">(today’s {fmtINR(settings.monthlyExpenses ?? 0)} × {yearsToRetire > 0 ? `${settings.inflationRate ?? 6}% inflation for ${yearsToRetire} yrs` : 'already at retirement age'})</span></span>
+                      <span className="text-surface-400">SIP / investments</span>
+                      <span className="font-semibold">{fmtINR(activeSIP)}/mo today
+                        {(baseAssump?.sipStepUp ?? 10) > 0 && yearsToRetire > 0 && (
+                          <span className="font-normal text-surface-400"> · steps up {baseAssump?.sipStepUp ?? 10}%/yr → {fmtINR(Math.round(activeSIP * Math.pow(1 + (baseAssump?.sipStepUp ?? 10) / 100, yearsToRetire)))}/mo by retirement</span>
+                        )}
+                      </span>
+                      <span className="text-surface-400">Income growth</span>
+                      <span className="font-semibold text-surface-700">{baseAssump?.incomeGrowthRate ?? 5}%/yr <span className="font-normal text-surface-400">salary assumed to grow this rate during accumulation</span></span>
                       <span className="text-surface-400">In retirement</span>
                       <span className="font-semibold text-surface-700">No salary, no SIP — corpus grows at {blendedRet}%, withdrawals grow at {settings.inflationRate ?? 6}%/yr</span>
-                      <span className="text-surface-400">Savings used</span>
-                      <span className="font-semibold">{fmtINR(Math.max(monthlySavingsTotal, 0))}/mo <span className="font-normal text-surface-400">(income surplus + SIP — both stop at FIRE)</span></span>
                     </div>
                     {(settings.monthlyExpenses ?? 0) === 60000 && (
                       <p className="text-amber-700 border-t border-amber-200 pt-1.5">⚠ Monthly expenses look like the default (₹60k). Update in Settings for accurate results.</p>
@@ -599,6 +602,9 @@ export default function FinancialArc({ onOpenSettings }: { onOpenSettings?: () =
             I invest an extra{' '}
             <span className="font-bold not-italic">{extraSip > 0 ? `₹${extraSip.toLocaleString('en-IN')}/mo` : '₹0'}</span>
             {' '}on top of my current SIP
+            {extraSip > 0 && (baseAssump?.sipStepUp ?? 10) > 0 && (
+              <span className="not-italic text-emerald-600"> · also steps up {baseAssump?.sipStepUp ?? 10}%/yr until FIRE</span>
+            )}
           </p>
           <Slider label="" value={extraSip} min={0} max={100000} step={1000}
             prefix="₹" onChange={v => { setExtraSip(v); setWiActive(v > 0) }} />
