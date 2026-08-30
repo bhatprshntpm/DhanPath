@@ -105,6 +105,9 @@ export interface Settings {
   targetAllocation?:   Partial<Record<string, number>>
   realEstateReturn:    number
   currency: string
+  // Zerodha Kite live-sync
+  kiteToken?:         string   // access_token (expires daily at 6:30 AM IST)
+  kiteConnectedAt?:   string   // ISO timestamp of last successful OAuth
 }
 
 export interface AppData {

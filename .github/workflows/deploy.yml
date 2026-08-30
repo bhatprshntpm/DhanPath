@@ -27,6 +27,12 @@ jobs:
 
       - run: npm ci
       - run: npm run build
+        env:
+          # Optional: set these in GitHub → Settings → Secrets → Actions
+          # to enable the live Zerodha Kite sync feature.
+          # Leave unset to hide the feature entirely (safe default).
+          VITE_KITE_API_KEY:    ${{ secrets.VITE_KITE_API_KEY }}
+          VITE_KITE_WORKER_URL: ${{ secrets.VITE_KITE_WORKER_URL }}
 
       - uses: actions/upload-pages-artifact@v3
         with:

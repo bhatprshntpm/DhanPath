@@ -6,6 +6,7 @@ import type { AppData, NetWorthSnapshot, Transaction, Holding, Debt, Goal, Scena
 import { loadData, saveData, DEFAULT_DATA } from '../lib/storage'
 import { nanoid } from '../lib/nanoid'
 import { refreshAllPrices } from '../lib/livePrice'
+import { isKiteConfigured, isKiteTokenValid, fetchKiteHoldings } from '../lib/kiteConnect'
 
 // Build a monthly snapshot from live holdings, carrying forward non-market
 // buckets (cash, real estate) from the previous snapshot. Used both on app
@@ -65,6 +66,7 @@ interface AppContextValue {
   addSnapshot:          (s: Omit<NetWorthSnapshot, 'id'>) => void
   addOrUpdateSnapshot:  (s: Omit<NetWorthSnapshot, 'id'>) => void
   captureSnapshot:      () => void
+  syncKiteHoldings:     () => Promise<{ updated: number; added: number }>
   addTransaction:    (t: Omit<Transaction, 'id'>)      => void
   deleteTransaction: (id: string)                      => void
   addHolding:        (h: Omit<Holding, 'id'>)        => void
@@ -91,6 +93,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [data, setData]       = useState<AppData>(DEFAULT_DATA)
   const [loading, setLoading] = useState(true)
   const latestData            = useRef<AppData>(DEFAULT_DATA)
+
+  // ── Capture Kite token from URL fragment after OAuth redirect ──────────────
+  // The Worker redirects to DhanPath as:  /DhanPath/#kite_token=ACCESS_TOKEN
+  // We grab it once, store it, and clean the URL so it's not in browser history.
+  useEffect(() => {
+    const hash = window.location.hash
+    if (!hash.includes('kite_token=')) return
+    const token = new URLSearchParams(hash.slice(1)).get('kite_token')
+    if (!token) return
+    // Clear the fragment immediately
+    window.history.replaceState(null, '', window.location.pathname + window.location.search)
+    // Persist token — will be picked up by the load effect below
+    loadData().then(d => {
+      const next = { ...d, settings: { ...d.settings, kiteToken: token, kiteConnectedAt: new Date().toISOString() } }
+      saveData(next).catch(() => {})
+      latestData.current = next
+      setData(next)
+    }).catch(() => {})
+  }, [])
 
   // Async initial load from IndexedDB
   useEffect(() => {
@@ -169,6 +190,59 @@ export function AppProvider({ children }: { children: ReactNode }) {
     update(snap)
   }, [update])
 
+  // Sync live holdings from Zerodha Kite API — merges into existing holdings by ISIN.
+  // Equity stocks/ETFs only (Kite Connect does not expose MF holdings).
+  const syncKiteHoldings = useCallback(async (): Promise<{ updated: number; added: number }> => {
+    const { kiteToken, kiteConnectedAt } = get().settings
+    if (!isKiteConfigured()) throw new Error('Kite not configured')
+    if (!kiteToken || !isKiteTokenValid(kiteConnectedAt))
+      throw new Error('Kite session expired — please reconnect')
+
+    const kiteHoldings = await fetchKiteHoldings(kiteToken)
+    const current = [...get().holdings]
+    let updated = 0, added = 0
+    const now = new Date().toISOString()
+
+    for (const kh of kiteHoldings) {
+      if (!kh.isin || kh.quantity <= 0) continue
+      const idx = current.findIndex(h => h.ticker === kh.isin)
+      if (idx >= 0) {
+        // Update price + quantity for existing holding
+        current[idx] = {
+          ...current[idx],
+          qty:            kh.quantity,
+          avgPrice:       kh.average_price,
+          lastPrice:      kh.last_price,
+          value:          Math.round(kh.quantity * kh.last_price),
+          costBasis:      Math.round(kh.quantity * kh.average_price),
+          priceUpdatedAt: now,
+        }
+        updated++
+      } else {
+        // New holding not yet in DhanPath — add with basic classification
+        current.push({
+          id:             nanoid(),
+          name:           kh.tradingsymbol,
+          ticker:         kh.isin,
+          type:           'stock',
+          assetClass:     'Equity',
+          subType:        kh.exchange,
+          qty:            kh.quantity,
+          avgPrice:       kh.average_price,
+          lastPrice:      kh.last_price,
+          value:          Math.round(kh.quantity * kh.last_price),
+          costBasis:      Math.round(kh.quantity * kh.average_price),
+          priceUpdatedAt: now,
+        })
+        added++
+      }
+    }
+
+    const next = snapshotFromHoldings({ ...get(), holdings: current })
+    update(next)
+    return { updated, added }
+  }, [update])
+
   const addTransaction    = (t: Omit<Transaction, 'id'>) =>
     update({ ...get(), transactions: [...get().transactions, { ...t, id: nanoid() }] })
 
@@ -236,7 +310,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   return (
     <AppContext.Provider value={{
       data, loading,
-      addSnapshot, addOrUpdateSnapshot, captureSnapshot,
+      addSnapshot, addOrUpdateSnapshot, captureSnapshot, syncKiteHoldings,
       addTransaction, deleteTransaction,
       addHolding, replaceHoldings, upsertHoldings, updateHolding, deleteHolding,
       addDebt, updateDebt, deleteDebt,

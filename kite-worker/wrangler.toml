@@ -1,0 +1,7 @@
+name = "dhanpath-kite-auth"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+
+# Secrets are set via:  wrangler secret put KITE_API_KEY
+#                       wrangler secret put KITE_API_SECRET
+# Never commit actual values here.

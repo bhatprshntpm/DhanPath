@@ -2,6 +2,7 @@ import { useState, useRef } from 'react'
 import {
   ChevronDown, ChevronRight, ChevronLeft, Upload, CheckCircle, Loader2, X,
   RefreshCw, RotateCcw, TrendingUp, Landmark, Coins, DollarSign, Wallet, Building2, Banknote,
+  Zap, WifiOff, Wifi,
 } from 'lucide-react'
 import ImportCard from './ImportCard'
 import DebtCard from './DebtCard'
@@ -23,6 +24,7 @@ import type { Holding } from '../types'
 import { useApp } from '../context/AppContext'
 import { DEFAULT_DATA } from '../lib/storage'
 import { fmtINR } from '../lib/calc'
+import { isKiteConfigured, isKiteTokenValid, kiteOAuthUrl } from '../lib/kiteConnect'
 
 // ─── Shared upload zone ───────────────────────────────────────────────────────
 function DropZone({ accept, color, onFile, label }: {
@@ -48,6 +50,95 @@ function DropZone({ accept, color, onFile, label }: {
 }
 
 // ─── Zerodha ──────────────────────────────────────────────────────────────────
+// ─── Zerodha Kite live-sync ───────────────────────────────────────────────────
+function KiteLiveSync() {
+  const { data, syncKiteHoldings, updateSettings } = useApp()
+  const { kiteToken, kiteConnectedAt } = data.settings
+  const [syncing, setSyncing] = useState(false)
+  const [result,  setResult]  = useState<{ updated: number; added: number } | null>(null)
+  const [error,   setError]   = useState<string | null>(null)
+
+  const connected = isKiteTokenValid(kiteConnectedAt)
+  const lastSync  = kiteConnectedAt
+    ? new Date(kiteConnectedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short' })
+    : null
+
+  async function handleSync() {
+    setSyncing(true); setResult(null); setError(null)
+    try {
+      const r = await syncKiteHoldings()
+      setResult(r)
+    } catch (e: any) {
+      setError(e?.message ?? 'Sync failed')
+    } finally {
+      setSyncing(false)
+    }
+  }
+
+  function handleDisconnect() {
+    updateSettings({ kiteToken: undefined, kiteConnectedAt: undefined })
+    setResult(null); setError(null)
+  }
+
+  return (
+    <div className="flex flex-col gap-3 pb-1">
+      {/* Status bar */}
+      <div className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-xs
+        ${connected
+          ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+          : kiteToken
+            ? 'bg-amber-50 border-amber-200 text-amber-700'   // expired
+            : 'bg-surface-50 border-surface-200 text-surface-500'}`}>
+        {connected
+          ? <Wifi size={13} className="shrink-0" />
+          : <WifiOff size={13} className="shrink-0" />}
+        {connected
+          ? `Live · last connected ${lastSync}`
+          : kiteToken
+            ? 'Session expired (resets daily at 6:30 AM) — reconnect to sync'
+            : 'Not connected — click below to authorise with Zerodha'}
+      </div>
+
+      {/* Action buttons */}
+      <div className="flex items-center gap-2 flex-wrap">
+        {connected ? (
+          <>
+            <button onClick={handleSync} disabled={syncing}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 disabled:opacity-60 transition-colors">
+              {syncing ? <Loader2 size={12} className="animate-spin" /> : <Zap size={12} />}
+              {syncing ? 'Syncing…' : 'Sync now'}
+            </button>
+            <button onClick={handleDisconnect}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-surface-200 text-surface-500 text-xs hover:text-rose-500 hover:border-rose-200 transition-colors">
+              Disconnect
+            </button>
+          </>
+        ) : (
+          <a href={kiteOAuthUrl()} rel="noopener noreferrer"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 text-white text-xs font-medium hover:bg-amber-600 transition-colors">
+            <Zap size={12} />
+            {kiteToken ? 'Reconnect Zerodha' : 'Connect Zerodha'}
+          </a>
+        )}
+      </div>
+
+      {/* Result / error feedback */}
+      {result && (
+        <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+          ✓ {result.updated} holding{result.updated !== 1 ? 's' : ''} updated
+          {result.added > 0 ? `, ${result.added} new` : ''} · equity &amp; ETFs synced
+          {' '}(mutual funds still need XLSX import)
+        </p>
+      )}
+      {error && (
+        <p className="text-xs text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">
+          {error}
+        </p>
+      )}
+    </div>
+  )
+}
+
 function ZerodhaContent() {
   const { data, replaceHoldings, addOrUpdateSnapshot } = useApp()
   const [parsing,   setParsing]   = useState(false)
@@ -115,6 +206,14 @@ function ZerodhaContent() {
 
   return (
     <div className="flex flex-col gap-4">
+      {/* Live Kite sync — only shown when VITE_KITE_API_KEY + VITE_KITE_WORKER_URL are set */}
+      {isKiteConfigured() && (
+        <div>
+          <p className="text-[10px] uppercase tracking-widest font-semibold text-surface-400 mb-2">Live sync (equity &amp; ETFs)</p>
+          <KiteLiveSync />
+        </div>
+      )}
+      {isKiteConfigured() && <div className="border-t border-surface-100 pt-1"><p className="text-[10px] uppercase tracking-widest font-semibold text-surface-400 mb-2">XLSX import (MFs &amp; full portfolio)</p></div>}
       {zerodhaHoldings.length > 0 && !result && (
         <div className="flex items-center justify-between px-3 py-2 bg-surface-50 rounded-xl border border-surface-100">
           <p className="text-xs text-surface-600">
