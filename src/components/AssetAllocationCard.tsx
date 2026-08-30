@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChevronDown, ChevronRight, Plus, Trash2, RefreshCw, AlertTriangle, Settings2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, Plus, Trash2, RefreshCw, AlertTriangle, Settings2, Pencil, Check, X } from 'lucide-react'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
 import { useApp } from '../context/AppContext'
 import { fmtINR, fmtPct } from '../lib/calc'
@@ -53,9 +53,72 @@ function holdingSubType(h: Holding): string {
   return 'Other'
 }
 
+// ─── Classification constants (shared with inline editor) ───────────────────
+const CLASSIFY_CLASSES = ['Equity','Debt','Gold','International','EPF / NPS / PPF','Cash & Savings','Cryptocurrency','Other'] as const
+const CLASSIFY_SUBTYPES: Record<string,string[]> = {
+  Equity:          ['Large Cap','Mid Cap','Small Cap','Flexi Cap','Multi Cap','ELSS (Tax Saving)','Index Fund','Sectoral / Thematic','Balanced Advantage','Aggressive Hybrid','Direct Stock','Equity ETF'],
+  Debt:            ['Liquid','Ultra Short Duration','Short Duration','Corporate Bond','Gilt','Gilt (10yr)','Floater','Dynamic Bond','Credit Risk','Banking & PSU','Fixed Deposit','Government Securities'],
+  Gold:            ['Gold Fund','Gold ETF','Sovereign Gold Bond','Silver Fund'],
+  International:   ['International Fund','Global ETF','US RSU / Stock'],
+  'EPF / NPS / PPF':['EPF','NPS','PPF','VPF','Gratuity','Pension'],
+  'Cash & Savings':['Savings','Current'],
+  Cryptocurrency:  ['Cryptocurrency'],
+  Other:           ['Index ETF','Commodity ETF','Other'],
+}
+
+function InlineClassifyEditor({ h, onSave, onCancel }: {
+  h: Holding
+  onSave: (patch: Partial<Holding>) => void
+  onCancel: () => void
+}) {
+  const [cls, setCls] = useState(h.assetClass ?? 'Equity')
+  const [sub, setSub] = useState(h.subType ?? '')
+  const opts = CLASSIFY_SUBTYPES[cls] ?? []
+
+  function handleCls(c: string) { setCls(c); setSub(CLASSIFY_SUBTYPES[c]?.[0] ?? '') }
+
+  return (
+    <div className="flex flex-col gap-2 px-2 py-2 bg-surface-50 rounded-lg border border-surface-100 mt-0.5 animate-fade-up">
+      {/* Conflict suggestion */}
+      {h.classificationConflict && h.suggestedAssetClass && (
+        <div className="flex items-center justify-between gap-2 px-2 py-1.5 bg-violet-50 border border-violet-200 rounded-lg">
+          <p className="text-[10px] text-violet-700">
+            mfapi suggests <strong>{h.suggestedAssetClass} / {h.suggestedSubType}</strong>
+          </p>
+          <div className="flex gap-1.5 shrink-0">
+            <button onClick={() => onSave({ assetClass: h.suggestedAssetClass, subType: h.suggestedSubType, userClassified: true, classificationConflict: false, suggestedAssetClass: undefined, suggestedSubType: undefined })}
+              className="text-[10px] px-2 py-0.5 rounded-md bg-violet-500 text-white hover:bg-violet-600 transition-colors">Accept</button>
+            <button onClick={() => onSave({ classificationConflict: false, suggestedAssetClass: undefined, suggestedSubType: undefined })}
+              className="text-[10px] px-2 py-0.5 rounded-md border border-violet-200 text-violet-600 hover:bg-violet-50 transition-colors">Dismiss</button>
+          </div>
+        </div>
+      )}
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <select value={cls} onChange={e => handleCls(e.target.value)}
+          className="text-xs border border-surface-200 rounded-lg px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-amber-400">
+          {CLASSIFY_CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+        <select value={sub} onChange={e => setSub(e.target.value)}
+          className="text-xs border border-surface-200 rounded-lg px-2 py-1 bg-white flex-1 focus:outline-none focus:ring-1 focus:ring-amber-400">
+          {opts.map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+        <button onClick={() => onSave({ assetClass: cls, subType: sub, userClassified: true, classificationConflict: false, suggestedAssetClass: undefined, suggestedSubType: undefined })}
+          className="flex items-center gap-1 px-2 py-1 rounded-lg bg-amber-500 text-white text-xs hover:bg-amber-600 transition-colors">
+          <Check size={11}/> Save
+        </button>
+        <button onClick={onCancel} className="p-1 rounded-lg text-surface-400 hover:text-surface-600 transition-colors"><X size={12}/></button>
+      </div>
+      {h.userClassified && !h.classificationConflict && (
+        <p className="text-[10px] text-surface-400">✓ Manually classified · won't be overwritten by auto-sync</p>
+      )}
+    </div>
+  )
+}
+
 export default function AssetAllocationCard() {
   const { data, addHolding, deleteHolding, updateHolding, updateSettings, captureSnapshot } = useApp()
   const [expandedClass, setExpandedClass] = useState<string | null>(null)
+  const [editingId,     setEditingId]     = useState<string | null>(null)
   const [showAddForm,   setShowAddForm]   = useState(false)
   const [showTargetForm,setShowTargetForm] = useState(false)
   const [targetDraft,   setTargetDraft]   = useState<Record<string,number>>({})
@@ -63,6 +126,11 @@ export default function AssetAllocationCard() {
   const [refreshProgress, setRefreshProgress] = useState({ done: 0, total: 0 })
   const [refreshResult, setRefreshResult] = useState<{ updated: number; failed: number; skipped: number } | null>(null)
   const [form, setForm] = useState({ name: '', ticker: '', type: 'etf' as const, value: '', costBasis: '' })
+
+  // Classification review count — surfaced as a header badge
+  const reviewCount = data.holdings.filter(h =>
+    h.subType === 'Mutual Fund' || h.classificationConflict
+  ).length
 
   const latest = data.snapshots.length
     ? [...data.snapshots].sort((a, b) => a.date.localeCompare(b.date)).at(-1)
@@ -157,14 +225,29 @@ export default function AssetAllocationCard() {
         <div>
           <p className="section-title">Asset Allocation</p>
           {hasAnyData && (
-            <p className="text-xs text-surface-300 mt-0.5">
-              {data.holdings.length} holdings
-              {lastUpdated && (
-                <span className="ml-1.5 text-surface-200">
-                  · prices as of {new Date(lastUpdated).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+            <div className="flex items-center gap-2 flex-wrap mt-0.5">
+              <p className="text-xs text-surface-300">
+                {data.holdings.length} holdings
+                {lastUpdated && (
+                  <span className="ml-1.5 text-surface-200">
+                    · prices as of {new Date(lastUpdated).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                )}
+              </p>
+              {reviewCount > 0 && (
+                <span className="text-[10px] font-medium text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full cursor-pointer"
+                  onClick={() => {
+                    // Expand the first class that has a reviewable holding
+                    const first = data.holdings.find(h => h.subType === 'Mutual Fund' || h.classificationConflict)
+                    if (first) {
+                      const cls = first.assetClass ?? 'Equity'
+                      setExpandedClass(cls)
+                    }
+                  }}>
+                  ⚠ {reviewCount} to classify
                 </span>
               )}
-            </p>
+            </div>
           )}
         </div>
         <div className="flex items-center gap-2">
@@ -419,29 +502,50 @@ export default function AssetAllocationCard() {
                             {items
                               .sort((a, b) => b.value - a.value)
                               .map(h => {
-                                const ret = h.costBasis > 0 ? ((h.value - h.costBasis) / h.costBasis) * 100 : 0
+                                const ret       = h.costBasis > 0 ? ((h.value - h.costBasis) / h.costBasis) * 100 : 0
+                                const needsReview = h.subType === 'Mutual Fund' || !!h.classificationConflict
+                                const isEditing = editingId === h.id
                                 return (
-                                  <div key={h.id} className="flex items-center gap-2 py-1.5 border-b border-surface-50 group">
-                                    <div className="flex-1 min-w-0">
-                                      <p className="text-xs font-medium text-surface-800 truncate">{h.name}</p>
-                                      <p className="text-[10px] text-surface-300 font-mono truncate">
-                                        {h.qty != null && h.qty > 0
-                                          ? `${h.qty % 1 === 0 ? h.qty : h.qty.toFixed(3)} units${h.lastPrice ? ` · ₹${h.lastPrice.toLocaleString('en-IN', { maximumFractionDigits: 0 })} each` : ''}`
-                                          : h.ticker || ''}
-                                      </p>
-                                    </div>
-                                    <div className="text-right shrink-0">
-                                      <p className="text-xs font-semibold font-mono text-surface-800">{fmtINR(h.value)}</p>
-                                      {h.costBasis > 0 && (
-                                        <p className={`text-[10px] font-medium ${ret >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
-                                          {ret >= 0 ? '+' : ''}{ret.toFixed(1)}%
-                                        </p>
+                                  <div key={h.id}>
+                                    <div className="flex items-center gap-2 py-1.5 border-b border-surface-50 group">
+                                      {/* Review dot */}
+                                      {needsReview && (
+                                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${h.classificationConflict ? 'bg-violet-400' : 'bg-amber-400'}`} />
                                       )}
+                                      <div className="flex-1 min-w-0">
+                                        <p className="text-xs font-medium text-surface-800 truncate">{h.name}</p>
+                                        <p className="text-[10px] text-surface-300 font-mono truncate">
+                                          {h.qty != null && h.qty > 0
+                                            ? `${h.qty % 1 === 0 ? h.qty : h.qty.toFixed(3)} units${h.lastPrice ? ` · ₹${h.lastPrice.toLocaleString('en-IN', { maximumFractionDigits: 0 })} each` : ''}`
+                                            : h.ticker || ''}
+                                        </p>
+                                      </div>
+                                      <div className="text-right shrink-0">
+                                        <p className="text-xs font-semibold font-mono text-surface-800">{fmtINR(h.value)}</p>
+                                        {h.costBasis > 0 && (
+                                          <p className={`text-[10px] font-medium ${ret >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
+                                            {ret >= 0 ? '+' : ''}{ret.toFixed(1)}%
+                                          </p>
+                                        )}
+                                      </div>
+                                      <button
+                                        onClick={() => setEditingId(isEditing ? null : h.id)}
+                                        title="Reclassify"
+                                        className={`transition-all ml-1 ${isEditing ? 'opacity-100 text-amber-500' : 'opacity-0 group-hover:opacity-100 text-surface-300 hover:text-amber-500'}`}>
+                                        <Pencil size={11}/>
+                                      </button>
+                                      <button onClick={() => deleteHolding(h.id)}
+                                        className="opacity-0 group-hover:opacity-100 text-surface-300 hover:text-rose-400 transition-all ml-0.5">
+                                        <Trash2 size={11}/>
+                                      </button>
                                     </div>
-                                    <button onClick={() => deleteHolding(h.id)}
-                                      className="opacity-0 group-hover:opacity-100 text-surface-300 hover:text-rose-400 transition-all ml-1">
-                                      <Trash2 size={11}/>
-                                    </button>
+                                    {isEditing && (
+                                      <InlineClassifyEditor
+                                        h={h}
+                                        onSave={patch => { updateHolding(h.id, patch); setEditingId(null) }}
+                                        onCancel={() => setEditingId(null)}
+                                      />
+                                    )}
                                   </div>
                                 )
                               })}
