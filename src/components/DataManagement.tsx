@@ -86,7 +86,9 @@ function ClassifyMFCard() {
     })
   }
   function save(id: string) {
-    updateHolding(id, draft(id))
+    // userClassified:true locks this classification — auto-reclassify and XLSX
+    // re-import will both skip this holding from now on.
+    updateHolding(id, { ...draft(id), userClassified: true })
   }
 
   async function retryAutoClassify() {

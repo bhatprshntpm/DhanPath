@@ -41,6 +41,10 @@ export interface Holding {
   priceUpdatedAt?: string
   value: number
   costBasis: number
+  /** Set to true when the user explicitly chose assetClass/subType via the
+   *  classification prompt. Prevents auto-reclassify and XLSX re-import from
+   *  overwriting the choice. */
+  userClassified?: boolean
 }
 
 export interface Debt {

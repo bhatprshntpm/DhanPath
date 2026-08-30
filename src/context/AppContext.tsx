@@ -207,13 +207,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
     update(snap)
   }, [update])
 
-  // Try to fix holdings where subType === 'Mutual Fund' (Kite default for unrecognised INF ISINs).
-  // Uses mfapi.in (cached 30 days in IndexedDB) to look up SEBI category.
-  // Returns count of holdings fixed. Safe to call multiple times (idempotent).
+  // Try to fix holdings where the classification is a known default/placeholder:
+  //   • subType === 'Mutual Fund'  — Kite sync default for new INF ISINs
+  //   • assetClass === 'Other' && subType === 'ETF'  — XLSX default for unrecognised ETFs
+  //     (covers MON100/NASDAQ → International, HNGSNGBEES/Hang Seng → International,
+  //      LIQUIDBEES → Debt, etc.)
+  //
+  // Holdings where userClassified === true are always skipped — user choice wins.
+  // Uses mfapi.in + bundled lookup table (cached 30 days). Returns count fixed.
   const reclassifyUnknownMFs = useCallback(async (): Promise<number> => {
-    const suspects = get().holdings.filter(
-      h => h.subType === 'Mutual Fund' && typeof h.ticker === 'string' && h.ticker.startsWith('INF'),
-    )
+    const suspects = get().holdings.filter(h => {
+      if (h.userClassified) return false          // never overwrite a manual choice
+      if (!h.ticker?.startsWith('INF')) return false  // only INF ISINs have SEBI category data
+      return (
+        h.subType === 'Mutual Fund' ||            // Kite default sentinel
+        (h.assetClass === 'Other' && h.subType === 'ETF')  // XLSX unclassified ETFs
+      )
+    })
     if (suspects.length === 0) return 0
 
     const results = await Promise.allSettled(
@@ -353,7 +363,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
     for (const h of hs) {
       const idx = current.findIndex(x => x.ticker && x.ticker === h.ticker)
       if (idx >= 0) {
-        current[idx] = { ...current[idx], ...h }
+        const existing = current[idx]
+        if (existing.userClassified) {
+          // User explicitly chose this classification — preserve it across XLSX re-imports.
+          // Only update price/quantity fields; never touch assetClass, subType, userClassified.
+          current[idx] = {
+            ...existing,
+            ...h,
+            assetClass:     existing.assetClass,
+            subType:        existing.subType,
+            userClassified: true,
+          }
+        } else {
+          current[idx] = { ...existing, ...h }
+        }
       } else {
         current.push({ ...h, id: nanoid() })
       }
