@@ -209,7 +209,10 @@ export default function FinancialArc({ onOpenSettings }: { onOpenSettings?: () =
 
   // Live net worth from holdings (matches hero section)
   const nwNow = useMemo(() => {
-    const sorted = [...snapshots].sort((a, b) => a.date.localeCompare(b.date))
+    const cm     = new Date().toISOString().slice(0, 7)
+    const sorted = [...snapshots]
+      .filter(s => s.date.slice(0, 7) <= cm)
+      .sort((a, b) => a.date.localeCompare(b.date))
     const latest = sorted.at(-1)
     if (data.holdings.length > 0) {
       const invested  = data.holdings.reduce((a, h) => a + h.value, 0)

@@ -10,12 +10,24 @@ export default function VitalsBar() {
   const { data } = useApp()
   const { snapshots, settings, scenarios, goals, holdings } = data
 
+  const currentMonth = new Date().toISOString().slice(0, 7)
+
+  // Only use past/present snapshots — exclude future-dated EPF projections
   const sorted = useMemo(
-    () => [...snapshots].sort((a, b) => a.date.localeCompare(b.date)),
-    [snapshots],
+    () => [...snapshots]
+      .filter(s => s.date.slice(0, 7) <= currentMonth)
+      .sort((a, b) => a.date.localeCompare(b.date)),
+    [snapshots, currentMonth],
   )
-  const latest    = sorted.at(-1)
-  const prevMonth = sorted.at(-2)
+  const latest = sorted.at(-1)
+  // Previous = most recent snapshot from a different calendar month (not just previous row)
+  const prevMonth = useMemo(
+    () => {
+      const latestMonth = latest?.date.slice(0, 7) ?? ''
+      return [...sorted].reverse().find(s => s.date.slice(0, 7) < latestMonth) ?? null
+    },
+    [sorted, latest],
+  )
 
   const nwNow = useMemo(() => {
     if (holdings.length > 0) {
@@ -70,10 +82,10 @@ export default function VitalsBar() {
         <p className="text-4xl sm:text-5xl font-bold tracking-tight text-surface-900 leading-none">
           {fmtINR(nwNow)}
         </p>
-        {nwPrev > 0 && (
+        {prevMonth && nwPrev > 0 && (
           <p className={`flex items-center gap-1 text-xs font-semibold mt-1.5 ${isUp ? 'text-emerald-600' : 'text-rose-500'}`}>
             {isUp ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
-            {isUp ? '+' : ''}{fmtINR(momChange)} this month
+            {isUp ? '+' : ''}{fmtINR(momChange)} vs last month
           </p>
         )}
       </div>
