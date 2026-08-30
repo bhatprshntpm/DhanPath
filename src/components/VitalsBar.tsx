@@ -35,11 +35,13 @@ export default function VitalsBar() {
 
   const effectiveScenario = useMemo(() => {
     if (!baseline) return null
+    // Kite SIP total takes precedence over manually-entered existingSIP
+    const activeSIP = settings.kiteMonthlyInvestment ?? (settings.existingSIP > 0 ? settings.existingSIP : undefined)
     return {
       ...baseline,
       assumptions: {
         ...baseline.assumptions,
-        extraMonthlySavings: settings.existingSIP > 0 ? settings.existingSIP : (baseline.assumptions.extraMonthlySavings ?? 0),
+        extraMonthlySavings: activeSIP ?? (baseline.assumptions.extraMonthlySavings ?? 0),
         monthlyExpenses: (settings.monthlyExpenses ?? 60000) + (settings.monthlyEMI ?? 0),
       },
     }
@@ -96,19 +98,34 @@ export default function VitalsBar() {
       {fireAge && requiredSIP && <div className="hidden sm:block w-px h-10 bg-surface-100" />}
 
       {/* Monthly SIP needed */}
-      {requiredSIP != null && goals.filter(g => g.enabled).length > 0 && (
-        <div>
-          <p className="text-[10px] uppercase tracking-widest font-semibold text-surface-300 mb-0.5">
-            Invest towards {goals.filter(g => g.enabled).length} goal{goals.filter(g => g.enabled).length !== 1 ? 's' : ''}
-          </p>
-          <p className="text-2xl font-bold text-surface-800 leading-none">{fmtINR(requiredSIP)}/mo</p>
-          <p className="text-xs text-surface-400 mt-1.5">
-            {baseline?.assumptions.extraMonthlySavings
-              ? `investing ${fmtINR(baseline.assumptions.extraMonthlySavings)}/mo now`
-              : 'set your SIP in scenarios'}
-          </p>
-        </div>
-      )}
+      {requiredSIP != null && goals.filter(g => g.enabled).length > 0 && (() => {
+        const currentInvestment = settings.kiteMonthlyInvestment
+          ?? (settings.existingSIP > 0 ? settings.existingSIP : (baseline?.assumptions.extraMonthlySavings ?? 0))
+        const gap = requiredSIP - currentInvestment
+        const fromKite = settings.kiteMonthlyInvestment != null
+        return (
+          <div>
+            <p className="text-[10px] uppercase tracking-widest font-semibold text-surface-300 mb-0.5">
+              Invest towards {goals.filter(g => g.enabled).length} goal{goals.filter(g => g.enabled).length !== 1 ? 's' : ''}
+            </p>
+            <p className="text-2xl font-bold text-surface-800 leading-none">{fmtINR(requiredSIP)}/mo</p>
+            <p className={`text-xs mt-1.5 ${
+              !currentInvestment ? 'text-surface-400' :
+              gap <= 0 ? 'text-emerald-600' : 'text-amber-600'
+            }`}>
+              {fromKite ? (
+                gap <= 0
+                  ? `✓ ₹${(currentInvestment/1000).toFixed(0)}k Kite SIPs cover your goals`
+                  : `₹${(currentInvestment/1000).toFixed(0)}k Kite SIPs · +${fmtINR(gap)} gap`
+              ) : currentInvestment > 0 ? (
+                gap <= 0
+                  ? `✓ investing ${fmtINR(currentInvestment)}/mo — goals covered`
+                  : `investing ${fmtINR(currentInvestment)}/mo · +${fmtINR(gap)} more needed`
+              ) : 'connect Kite or set SIP in scenarios'}
+            </p>
+          </div>
+        )
+      })()}
     </div>
   )
 }

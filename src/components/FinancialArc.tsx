@@ -202,7 +202,7 @@ export default function FinancialArc({ onOpenSettings }: { onOpenSettings?: () =
 
   // Current levers derived from settings
   const cur = {
-    monthlySavings: settings.existingSIP > 0 ? settings.existingSIP : (baseAssump?.extraMonthlySavings ?? 0),
+    monthlySavings: settings.kiteMonthlyInvestment ?? (settings.existingSIP > 0 ? settings.existingSIP : (baseAssump?.extraMonthlySavings ?? 0)),
     returnRate:     baseAssump?.annualReturn ?? 12,
     expenses:       settings.monthlyExpenses ?? 60000,
   }
@@ -360,9 +360,10 @@ export default function FinancialArc({ onOpenSettings }: { onOpenSettings?: () =
   const blendedRet = baseAssump
     ? Math.round((baseAssump.equityReturn * (baseAssump.equityAllocation / 100) + baseAssump.debtReturn * (1 - baseAssump.equityAllocation / 100)) * 10) / 10
     : 12
+  const activeSIP = settings.kiteMonthlyInvestment ?? settings.existingSIP ?? baseAssump?.extraMonthlySavings ?? 0
   const monthlySavingsTotal = (baseAssump?.monthlyIncome ?? 0) > 0
-    ? (baseAssump!.monthlyIncome - (settings.monthlyExpenses ?? 0)) + (settings.existingSIP ?? baseAssump?.extraMonthlySavings ?? 0)
-    : (settings.existingSIP ?? baseAssump?.extraMonthlySavings ?? 0)
+    ? (baseAssump!.monthlyIncome - (settings.monthlyExpenses ?? 0)) + activeSIP
+    : activeSIP
   const corpusAtFire = fireYearCur !== null
     ? (projCur.find(p => p.year === fireYearCur)?.value ?? 0)
     : 0

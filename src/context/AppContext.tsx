@@ -306,8 +306,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
 
     const activeSips = sips.filter(s => s.status === 'ACTIVE')
+
+    // Normalise all active SIPs to a monthly equivalent.
+    // weekly × (52/12) ≈ 4.33 · quarterly ÷ 3 · monthly = as-is
+    function toMonthly(amount: number, freq: string): number {
+      if (freq === 'weekly')    return Math.round(amount * 52 / 12)
+      if (freq === 'quarterly') return Math.round(amount / 3)
+      return Math.round(amount)
+    }
+    const kiteMonthlyInvestment = activeSips.reduce(
+      (sum, s) => sum + toMonthly(s.instalment_amount, s.frequency), 0,
+    )
+
     const next = snapshotFromHoldings({ ...get(), holdings: current })
-    update(next)
+    // Persist the SIP total so projections use real data automatically
+    const withSIP = kiteMonthlyInvestment > 0
+      ? { ...next, settings: { ...next.settings, kiteMonthlyInvestment } }
+      : next
+    update(withSIP)
     // Auto-fix any newly added MFs that got the default 'Mutual Fund' subType
     reclassifyUnknownMFs().catch(() => {})
     return { updated, added, sips: activeSips.length }
