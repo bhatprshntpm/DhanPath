@@ -50,6 +50,76 @@ function DropZone({ accept, color, onFile, label }: {
 }
 
 // ─── Zerodha ──────────────────────────────────────────────────────────────────
+// ─── Review card for classification conflicts ─────────────────────────────────
+function ConflictReviewCard() {
+  const { data, updateHolding } = useApp()
+
+  const conflicts = data.holdings.filter(h => h.classificationConflict && h.userClassified)
+  if (conflicts.length === 0) return null
+
+  function accept(h: typeof conflicts[number]) {
+    updateHolding(h.id, {
+      assetClass:             h.suggestedAssetClass,
+      subType:                h.suggestedSubType,
+      userClassified:         true,          // keep the manual flag — user is now choosing the suggestion
+      classificationConflict: false,
+      suggestedAssetClass:    undefined,
+      suggestedSubType:       undefined,
+    })
+  }
+
+  function keep(h: typeof conflicts[number]) {
+    updateHolding(h.id, {
+      classificationConflict: false,
+      suggestedAssetClass:    undefined,
+      suggestedSubType:       undefined,
+    })
+  }
+
+  return (
+    <div className="flex flex-col gap-3 p-3 rounded-xl border border-violet-200 bg-violet-50">
+      <div>
+        <p className="text-xs font-semibold text-violet-800">
+          {conflicts.length} classification conflict{conflicts.length > 1 ? 's' : ''}
+        </p>
+        <p className="text-[10px] text-violet-700 mt-0.5">
+          mfapi.in suggests a different category for your manually-classified holdings. Review and decide.
+        </p>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        {conflicts.map(h => (
+          <div key={h.id} className="flex flex-col gap-2 p-2.5 rounded-lg bg-white border border-violet-100">
+            <p className="text-xs font-medium text-surface-800 truncate">{h.name}</p>
+            <div className="grid grid-cols-2 gap-2 text-[10px]">
+              <div className="rounded-md bg-surface-50 px-2 py-1.5 border border-surface-100">
+                <p className="font-semibold text-surface-400 uppercase tracking-widest mb-0.5">Your choice</p>
+                <p className="font-medium text-surface-700">{h.assetClass}</p>
+                <p className="text-surface-500">{h.subType}</p>
+              </div>
+              <div className="rounded-md bg-violet-50 px-2 py-1.5 border border-violet-200">
+                <p className="font-semibold text-violet-400 uppercase tracking-widest mb-0.5">mfapi suggests</p>
+                <p className="font-medium text-violet-700">{h.suggestedAssetClass}</p>
+                <p className="text-violet-500">{h.suggestedSubType}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={() => accept(h)}
+                className="flex-1 py-1 rounded-lg bg-violet-500 text-white text-xs font-medium hover:bg-violet-600 transition-colors">
+                Use suggestion
+              </button>
+              <button onClick={() => keep(h)}
+                className="flex-1 py-1 rounded-lg border border-surface-200 text-surface-600 text-xs hover:bg-surface-50 transition-colors">
+                Keep mine
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ─── Manual classification for holdings mfapi couldn't identify ──────────────
 const ASSET_CLASSES = ['Equity', 'Debt', 'Gold', 'International', 'Other'] as const
 
@@ -310,7 +380,10 @@ function ZerodhaContent() {
         <div>
           <p className="text-[10px] uppercase tracking-widest font-semibold text-surface-400 mb-2">Live sync (demat holdings — stocks, ETFs &amp; MFs)</p>
           <KiteLiveSync />
-          <div className="mt-3"><ClassifyMFCard /></div>
+          <div className="mt-3 flex flex-col gap-3">
+            <ConflictReviewCard />
+            <ClassifyMFCard />
+          </div>
         </div>
       )}
       {isKiteConfigured() && <div className="border-t border-surface-100 pt-1"><p className="text-[10px] uppercase tracking-widest font-semibold text-surface-400 mb-2">XLSX import (MFs &amp; full portfolio)</p></div>}

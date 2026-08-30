@@ -207,42 +207,74 @@ export function AppProvider({ children }: { children: ReactNode }) {
     update(snap)
   }, [update])
 
-  // Try to fix holdings where the classification is a known default/placeholder:
-  //   • subType === 'Mutual Fund'  — Kite sync default for new INF ISINs
-  //   • assetClass === 'Other' && subType === 'ETF'  — XLSX default for unrecognised ETFs
-  //     (covers MON100/NASDAQ → International, HNGSNGBEES/Hang Seng → International,
-  //      LIQUIDBEES → Debt, etc.)
+  // Auto-classify INF holdings using mfapi.in + bundled lookup (cached 30 days).
   //
-  // Holdings where userClassified === true are always skipped — user choice wins.
-  // Uses mfapi.in + bundled lookup table (cached 30 days). Returns count fixed.
+  // Three outcomes per holding:
+  //  A) Not userClassified + is a sentinel (subType 'Mutual Fund' or 'Other/ETF'):
+  //     → auto-apply mfapi suggestion (as before)
+  //  B) userClassified + mfapi DISAGREES with current assetClass/subType:
+  //     → store suggestion fields + set classificationConflict: true
+  //       (user sees a review card but their choice is preserved)
+  //  C) userClassified + mfapi AGREES with current:
+  //     → clear any previous conflict flag (no review needed)
+  //
+  // Returns count of holdings auto-fixed (case A only).
   const reclassifyUnknownMFs = useCallback(async (): Promise<number> => {
-    const suspects = get().holdings.filter(h => {
-      if (h.userClassified) return false          // never overwrite a manual choice
-      if (!h.ticker?.startsWith('INF')) return false  // only INF ISINs have SEBI category data
-      return (
-        h.subType === 'Mutual Fund' ||            // Kite default sentinel
-        (h.assetClass === 'Other' && h.subType === 'ETF')  // XLSX unclassified ETFs
-      )
-    })
-    if (suspects.length === 0) return 0
+    const allINF = get().holdings.filter(h => h.ticker?.startsWith('INF'))
+    if (allINF.length === 0) return 0
 
     const results = await Promise.allSettled(
-      suspects.map(h => classifyISIN(h.ticker!, h.name, '', '').catch(() => null)),
+      allINF.map(h => classifyISIN(h.ticker!, h.name, '', '').catch(() => null)),
     )
 
     const current = [...get().holdings]
-    let fixed = 0
+    let fixed = 0, changed = false
+
     results.forEach((r, i) => {
-      if (r.status === 'fulfilled' && r.value && r.value.subType !== 'Mutual Fund') {
-        const idx = current.findIndex(x => x.id === suspects[i].id)
-        if (idx >= 0) {
-          current[idx] = { ...current[idx], assetClass: r.value.assetClass, subType: r.value.subType }
-          fixed++
+      if (r.status !== 'fulfilled' || !r.value) return
+      const sug = r.value
+      // mfapi returned the same vague default — no useful info, skip
+      if (sug.subType === 'Mutual Fund' || sug.assetClass === 'Other') return
+
+      const h    = allINF[i]
+      const idx  = current.findIndex(x => x.id === h.id)
+      if (idx < 0) return
+
+      const ex      = current[idx]
+      const differs = ex.assetClass !== sug.assetClass || ex.subType !== sug.subType
+
+      if (ex.userClassified) {
+        // Case B / C — never overwrite, but track disagreements
+        if (differs) {
+          current[idx] = {
+            ...ex,
+            suggestedAssetClass:    sug.assetClass,
+            suggestedSubType:       sug.subType,
+            classificationConflict: true,
+          }
+          changed = true
+        } else if (ex.classificationConflict) {
+          // mfapi now agrees — clear stale conflict flag
+          current[idx] = {
+            ...ex,
+            classificationConflict: false,
+            suggestedAssetClass:    undefined,
+            suggestedSubType:       undefined,
+          }
+          changed = true
+        }
+      } else {
+        // Case A — auto-apply for sentinel subTypes
+        const isSentinel = ex.subType === 'Mutual Fund' ||
+                           (ex.assetClass === 'Other' && ex.subType === 'ETF')
+        if (isSentinel && differs) {
+          current[idx] = { ...ex, assetClass: sug.assetClass, subType: sug.subType }
+          fixed++; changed = true
         }
       }
     })
 
-    if (fixed > 0) update({ ...get(), holdings: current })
+    if (changed) update({ ...get(), holdings: current })
     return fixed
   }, [update])
 

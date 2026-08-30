@@ -45,6 +45,11 @@ export interface Holding {
    *  classification prompt. Prevents auto-reclassify and XLSX re-import from
    *  overwriting the choice. */
   userClassified?: boolean
+  /** mfapi.in suggestion when it differs from the current classification.
+   *  Set only when userClassified === true and mfapi disagrees. */
+  suggestedAssetClass?:    string
+  suggestedSubType?:       string
+  classificationConflict?: boolean
 }
 
 export interface Debt {
