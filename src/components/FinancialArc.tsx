@@ -267,13 +267,17 @@ export default function FinancialArc({ onOpenSettings }: { onOpenSettings?: () =
 
   const currentMonth = new Date().toISOString().slice(0, 7)
   const pastRows     = useMemo(() => rows.filter(r => r.s.date <= currentMonth), [rows, currentMonth])
-  const startYear    = pastRows.length ? parseInt(pastRows[0].s.date.slice(0, 4)) : currentYear
   const endYear      = currentYear + (settings.lifeExpectancy - settings.currentAge)
   const retireYear   = currentYear + (settings.retirementAge  - settings.currentAge)
   const todayX       = currentYear + new Date().getMonth() / 12
 
+  // Start from the first actual data point (decimal year), with a 1-month margin so
+  // the first dot isn't flush against the left edge.  No blank history before uploads.
+  const firstDataX = pastRows.length
+    ? (() => { const [yy, mm] = pastRows[0].s.date.split('-').map(Number); return yy + (mm - 1) / 12 })()
+    : todayX
   const windowEnd   = view === '5yr' ? currentYear + 5 : view === '10yr' ? currentYear + 10 : endYear
-  const windowStart = Math.min(startYear, currentYear - 1)
+  const windowStart = firstDataX - 1 / 12   // 1 month of breathing room before first data
 
   const allChartData = useMemo(() => {
     // Numeric decimal-year x-axis so intra-year monthly history plots as distinct
