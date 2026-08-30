@@ -264,7 +264,13 @@ export default function FinancialArc({ onOpenSettings }: { onOpenSettings?: () =
   // Use FIRE age as the retirement split in the chart — not settings.retirementAge.
   // Without this, the chart shows a different retirement age from the sentence.
   const projSettings   = fireAgeCur ? { ...settings, retirementAge: fireAgeCur } : settings
-  const projSettingsWi = fireAgeWi  ? { ...settings, retirementAge: fireAgeWi  } : settings
+  // What-if chart line uses the SAME retirement age as the base scenario so the
+  // comparison is apples-to-apples: same drawdown period, only the savings rate
+  // differs. Using fireAgeWi (earlier retirement) would give more drawdown years
+  // which can make the what-if corpus at age 100 LOWER despite a higher SIP —
+  // counter-intuitive. The "retire earlier" benefit is shown in the headline text,
+  // not the chart line.
+  const projSettingsWi = { ...projSettings }
   const projCur = curScenario ? projectLifetime(nwNow, projSettings,   curScenario, goals) : []
   const projWi  = wiScenario  ? projectLifetime(nwNow, projSettingsWi, wiScenario,  goals) : []
 
