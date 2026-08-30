@@ -126,8 +126,8 @@ function KiteLiveSync() {
       {result && (
         <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
           ✓ {result.updated} holding{result.updated !== 1 ? 's' : ''} updated
-          {result.added > 0 ? `, ${result.added} new` : ''} · equity &amp; ETFs synced
-          {' '}(mutual funds still need XLSX import)
+          {result.added > 0 ? `, ${result.added} new` : ''} · all demat holdings synced
+          {' '}(FDs, EPF, PPF — manual import only)
         </p>
       )}
       {error && (
@@ -209,7 +209,7 @@ function ZerodhaContent() {
       {/* Live Kite sync — only shown when VITE_KITE_API_KEY + VITE_KITE_WORKER_URL are set */}
       {isKiteConfigured() && (
         <div>
-          <p className="text-[10px] uppercase tracking-widest font-semibold text-surface-400 mb-2">Live sync (equity &amp; ETFs)</p>
+          <p className="text-[10px] uppercase tracking-widest font-semibold text-surface-400 mb-2">Live sync (demat holdings — stocks, ETFs &amp; MFs)</p>
           <KiteLiveSync />
         </div>
       )}

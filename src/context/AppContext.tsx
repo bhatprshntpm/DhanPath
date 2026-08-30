@@ -8,11 +8,26 @@ import { nanoid } from '../lib/nanoid'
 import { refreshAllPrices } from '../lib/livePrice'
 import { isKiteConfigured, isKiteTokenValid, fetchKiteHoldings } from '../lib/kiteConnect'
 
+/** Infer type, assetClass and subType for a new holding coming from Kite,
+ *  using the ISIN prefix as the primary signal. */
+function classifyKiteIsin(isin: string, tradingsymbol: string) {
+  const p = isin.slice(0, 3).toUpperCase()
+  if (isin.startsWith('IN8'))
+    return { hType: 'bond' as const, hClass: 'Gold',  hSub: 'Sovereign Gold Bond' }
+  if (isin.startsWith('IN0'))
+    return { hType: 'bond' as const, hClass: 'Debt',  hSub: 'Government Securities' }
+  if (p === 'INF')
+    return { hType: 'etf'  as const, hClass: 'Equity', hSub: 'Mutual Fund' }
+  if (p === 'INE')
+    return { hType: 'stock' as const, hClass: 'Equity', hSub: tradingsymbol }
+  return   { hType: 'stock' as const, hClass: 'Equity', hSub: tradingsymbol }
+}
+
 // Build a monthly snapshot from live holdings, carrying forward non-market
 // buckets (cash, real estate) from the previous snapshot. Used both on app
 // load and on manual refresh so the growth history builds automatically.
 function snapshotFromHoldings(prev: AppData): AppData {
-  const now = new Date().toISOString().slice(0, 7)
+  const now = new Date().toISOString().slice(0, 10)  // YYYY-MM-DD — one entry per day synced
   const latest = prev.snapshots.length
     ? [...prev.snapshots].sort((a, b) => a.date.localeCompare(b.date)).at(-1)
     : undefined
@@ -191,7 +206,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [update])
 
   // Sync live holdings from Zerodha Kite API — merges into existing holdings by ISIN.
-  // Equity stocks/ETFs only (Kite Connect does not expose MF holdings).
+  // Covers all demat holdings: equity, ETFs, and demat-format mutual funds (INF ISINs).
   const syncKiteHoldings = useCallback(async (): Promise<{ updated: number; added: number }> => {
     const { kiteToken, kiteConnectedAt } = get().settings
     if (!isKiteConfigured()) throw new Error('Kite not configured')
@@ -219,14 +234,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
         updated++
       } else {
-        // New holding not yet in DhanPath — add with basic classification
+        // New holding not yet in DhanPath — classify by ISIN prefix.
+        // INF = demat mutual fund, INE = equity, IN8 = Sovereign Gold Bond, IN0 = G-Sec
+        const { hType, hClass, hSub } = classifyKiteIsin(kh.isin, kh.tradingsymbol)
         current.push({
           id:             nanoid(),
           name:           kh.tradingsymbol,
           ticker:         kh.isin,
-          type:           'stock',
-          assetClass:     'Equity',
-          subType:        kh.exchange,
+          type:           hType,
+          assetClass:     hClass,
+          subType:        hSub,
           qty:            kh.quantity,
           avgPrice:       kh.average_price,
           lastPrice:      kh.last_price,

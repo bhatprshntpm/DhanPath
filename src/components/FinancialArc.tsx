@@ -266,7 +266,7 @@ export default function FinancialArc({ onOpenSettings }: { onOpenSettings?: () =
   const projWi  = wiScenario  ? projectLifetime(nwNow, projSettingsWi, wiScenario,  goals) : []
 
   const currentMonth = new Date().toISOString().slice(0, 7)
-  const pastRows     = useMemo(() => rows.filter(r => r.s.date <= currentMonth), [rows, currentMonth])
+  const pastRows     = useMemo(() => rows.filter(r => r.s.date.slice(0, 7) <= currentMonth), [rows, currentMonth])
   const endYear      = currentYear + (settings.lifeExpectancy - settings.currentAge)
   const retireYear   = currentYear + (settings.retirementAge  - settings.currentAge)
   const todayX       = currentYear + new Date().getMonth() / 12
@@ -293,7 +293,7 @@ export default function FinancialArc({ onOpenSettings }: { onOpenSettings?: () =
 
     // Past monthly actuals — each snapshot at its true fractional-year position.
     rows.forEach(({ adjustedNw, s }) => {
-      if (s.date > currentMonth) return
+      if (s.date.slice(0, 7) > currentMonth) return
       const [yy, mm] = s.date.split('-').map(Number)
       const x = yy + (mm - 1) / 12
       const pt = at(x)

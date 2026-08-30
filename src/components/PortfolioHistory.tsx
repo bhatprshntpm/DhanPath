@@ -15,12 +15,29 @@ function shortMonth(yyyyMM: string) {
 
 // Deduplicate: for same month keep highest total assets snapshot
 function deduplicate(snapshots: any[]): any[] {
-  const map = new Map<string, any>()
+  // Key by full date (YYYY-MM-DD or YYYY-MM).
+  // If both a monthly entry (YYYY-MM) and daily entries (YYYY-MM-DD) exist for
+  // the same calendar month, prefer the daily ones — they're more precise.
+  const byMonth = new Map<string, any[]>()
   for (const s of snapshots) {
-    const existing = map.get(s.date)
-    if (!existing || totalAssets(s) > totalAssets(existing)) map.set(s.date, s)
+    const month = s.date.slice(0, 7)
+    if (!byMonth.has(month)) byMonth.set(month, [])
+    byMonth.get(month)!.push(s)
   }
-  return Array.from(map.values()).sort((a, b) => a.date.localeCompare(b.date))
+  const result: any[] = []
+  for (const entries of byMonth.values()) {
+    const daily = entries.filter(s => s.date.length === 10)
+    const pool  = daily.length > 0 ? daily : entries
+    // Within the pool keep the one with the highest total assets
+    const best  = pool.reduce((a, b) => totalAssets(b) > totalAssets(a) ? b : a, pool[0])
+    // But if there are multiple daily entries (different days within same month), keep ALL
+    if (daily.length > 1) {
+      result.push(...daily.sort((a, b) => a.date.localeCompare(b.date)))
+    } else {
+      result.push(best)
+    }
+  }
+  return result.sort((a, b) => a.date.localeCompare(b.date))
 }
 
 // Forward-fill ALL asset types — any field that was non-zero in a previous
@@ -247,7 +264,7 @@ export default function PortfolioHistory() {
   // month. Future-dated snapshots (e.g. projected EPF) are not "history".
   const rows = useMemo(() => {
     const currentMonth = new Date().toISOString().slice(0, 7)
-    const pastOnly = data.snapshots.filter(s => s.date <= currentMonth)
+    const pastOnly = data.snapshots.filter(s => s.date.slice(0, 7) <= currentMonth)
     const deduped = deduplicate(pastOnly)
     return applyCarryForward(deduped)
   }, [data.snapshots])
