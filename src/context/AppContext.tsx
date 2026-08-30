@@ -7,6 +7,7 @@ import { loadData, saveData, DEFAULT_DATA } from '../lib/storage'
 import { nanoid } from '../lib/nanoid'
 import { refreshAllPrices } from '../lib/livePrice'
 import { isKiteConfigured, isKiteTokenValid, fetchKiteSync } from '../lib/kiteConnect'
+import { classifyHolding as classifyISIN } from '../lib/holdingClassifier'
 
 /** Infer type, assetClass and subType for a new holding coming from Kite,
  *  using the ISIN prefix as the primary signal. */
@@ -81,7 +82,8 @@ interface AppContextValue {
   addSnapshot:          (s: Omit<NetWorthSnapshot, 'id'>) => void
   addOrUpdateSnapshot:  (s: Omit<NetWorthSnapshot, 'id'>) => void
   captureSnapshot:      () => void
-  syncKiteHoldings:     () => Promise<{ updated: number; added: number; sips: number }>
+  syncKiteHoldings:       () => Promise<{ updated: number; added: number; sips: number }>
+  reclassifyUnknownMFs:   () => Promise<number>   // returns count fixed
   addTransaction:    (t: Omit<Transaction, 'id'>)      => void
   deleteTransaction: (id: string)                      => void
   addHolding:        (h: Omit<Holding, 'id'>)        => void
@@ -205,6 +207,35 @@ export function AppProvider({ children }: { children: ReactNode }) {
     update(snap)
   }, [update])
 
+  // Try to fix holdings where subType === 'Mutual Fund' (Kite default for unrecognised INF ISINs).
+  // Uses mfapi.in (cached 30 days in IndexedDB) to look up SEBI category.
+  // Returns count of holdings fixed. Safe to call multiple times (idempotent).
+  const reclassifyUnknownMFs = useCallback(async (): Promise<number> => {
+    const suspects = get().holdings.filter(
+      h => h.subType === 'Mutual Fund' && typeof h.ticker === 'string' && h.ticker.startsWith('INF'),
+    )
+    if (suspects.length === 0) return 0
+
+    const results = await Promise.allSettled(
+      suspects.map(h => classifyISIN(h.ticker!, h.name, '', '').catch(() => null)),
+    )
+
+    const current = [...get().holdings]
+    let fixed = 0
+    results.forEach((r, i) => {
+      if (r.status === 'fulfilled' && r.value && r.value.subType !== 'Mutual Fund') {
+        const idx = current.findIndex(x => x.id === suspects[i].id)
+        if (idx >= 0) {
+          current[idx] = { ...current[idx], assetClass: r.value.assetClass, subType: r.value.subType }
+          fixed++
+        }
+      }
+    })
+
+    if (fixed > 0) update({ ...get(), holdings: current })
+    return fixed
+  }, [update])
+
   // Sync live holdings from Zerodha Kite API.
   // Fetches equity holdings (/portfolio/holdings) AND Coin MF holdings (/mf/holdings)
   // in one round-trip, plus active SIPs (/mf/sips).
@@ -277,11 +308,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const activeSips = sips.filter(s => s.status === 'ACTIVE')
     const next = snapshotFromHoldings({ ...get(), holdings: current })
     update(next)
+    // Auto-fix any newly added MFs that got the default 'Mutual Fund' subType
+    reclassifyUnknownMFs().catch(() => {})
     return { updated, added, sips: activeSips.length }
-  }, [update])
+  }, [update, reclassifyUnknownMFs])
 
   const addTransaction    = (t: Omit<Transaction, 'id'>) =>
     update({ ...get(), transactions: [...get().transactions, { ...t, id: nanoid() }] })
+
+  // Once loading completes, silently try to fix any stale 'Mutual Fund' subtype holdings
+  // (from a previous sync before proper classification was in place).
+  useEffect(() => {
+    if (!loading) reclassifyUnknownMFs().catch(() => {})
+  }, [loading]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const deleteTransaction = (id: string) =>
     update({ ...get(), transactions: get().transactions.filter(x => x.id !== id) })
@@ -347,7 +386,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   return (
     <AppContext.Provider value={{
       data, loading,
-      addSnapshot, addOrUpdateSnapshot, captureSnapshot, syncKiteHoldings,
+      addSnapshot, addOrUpdateSnapshot, captureSnapshot, syncKiteHoldings, reclassifyUnknownMFs,
       addTransaction, deleteTransaction,
       addHolding, replaceHoldings, upsertHoldings, updateHolding, deleteHolding,
       addDebt, updateDebt, deleteDebt,

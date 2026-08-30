@@ -50,6 +50,101 @@ function DropZone({ accept, color, onFile, label }: {
 }
 
 // ─── Zerodha ──────────────────────────────────────────────────────────────────
+// ─── Manual classification for holdings mfapi couldn't identify ──────────────
+const ASSET_CLASSES = ['Equity', 'Debt', 'Gold', 'International', 'Other'] as const
+
+const SUBTYPES: Record<string, string[]> = {
+  Equity:        ['Large Cap', 'Mid Cap', 'Small Cap', 'Flexi Cap', 'Multi Cap',
+                  'ELSS (Tax Saving)', 'Index Fund', 'Sectoral / Thematic',
+                  'Balanced Advantage', 'Aggressive Hybrid', 'Direct Stock'],
+  Debt:          ['Liquid', 'Ultra Short Duration', 'Short Duration', 'Medium Duration',
+                  'Corporate Bond', 'Gilt', 'Gilt (10yr)', 'Floater',
+                  'Dynamic Bond', 'Credit Risk', 'Banking & PSU', 'Fixed Deposit'],
+  Gold:          ['Gold Fund', 'Gold ETF', 'Sovereign Gold Bond', 'Silver Fund'],
+  International: ['International Fund', 'Global ETF', 'US RSU / Stock'],
+  Other:         ['Index ETF', 'Commodity ETF', 'Other'],
+}
+
+function ClassifyMFCard() {
+  const { data, updateHolding, reclassifyUnknownMFs } = useApp()
+  const [retrying, setRetrying] = useState(false)
+  const [drafts, setDrafts]     = useState<Record<string, { assetClass: string; subType: string }>>({})
+
+  const unclassified = data.holdings.filter(
+    h => h.subType === 'Mutual Fund' && typeof h.ticker === 'string' && h.ticker.startsWith('INF'),
+  )
+  if (unclassified.length === 0) return null
+
+  function draft(id: string) {
+    return drafts[id] ?? { assetClass: 'Equity', subType: 'Large Cap' }
+  }
+  function setField(id: string, field: 'assetClass' | 'subType', val: string) {
+    setDrafts(prev => {
+      const d = { ...draft(id), [field]: val }
+      if (field === 'assetClass') d.subType = SUBTYPES[val]?.[0] ?? ''
+      return { ...prev, [id]: d }
+    })
+  }
+  function save(id: string) {
+    updateHolding(id, draft(id))
+  }
+
+  async function retryAutoClassify() {
+    setRetrying(true)
+    await reclassifyUnknownMFs().catch(() => {})
+    setRetrying(false)
+  }
+
+  return (
+    <div className="flex flex-col gap-3 p-3 rounded-xl border border-amber-200 bg-amber-50">
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <p className="text-xs font-semibold text-amber-800">
+            {unclassified.length} holding{unclassified.length > 1 ? 's' : ''} need classification
+          </p>
+          <p className="text-[10px] text-amber-700 mt-0.5">
+            These were added via Kite sync and couldn't be auto-identified. Set the category once — future syncs will remember it.
+          </p>
+        </div>
+        <button onClick={retryAutoClassify} disabled={retrying}
+          className="flex items-center gap-1 px-2 py-1 rounded-lg border border-amber-300 text-amber-700 text-[10px] font-medium hover:bg-amber-100 disabled:opacity-50 shrink-0 transition-colors">
+          {retrying ? <Loader2 size={10} className="animate-spin" /> : <RefreshCw size={10} />}
+          Retry auto
+        </button>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        {unclassified.map(h => {
+          const d = draft(h.id)
+          const subtypeOpts = SUBTYPES[d.assetClass] ?? []
+          return (
+            <div key={h.id} className="flex flex-col gap-1.5 p-2 rounded-lg bg-white border border-amber-100">
+              <p className="text-xs font-medium text-surface-800 truncate">{h.name}</p>
+              <p className="text-[10px] text-surface-400 font-mono">{h.ticker}</p>
+              <div className="flex items-center gap-2 flex-wrap">
+                <select value={d.assetClass}
+                  onChange={e => setField(h.id, 'assetClass', e.target.value)}
+                  className="text-xs border border-surface-200 rounded-lg px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-amber-400">
+                  {ASSET_CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+                <select value={d.subType}
+                  onChange={e => setField(h.id, 'subType', e.target.value)}
+                  className="text-xs border border-surface-200 rounded-lg px-2 py-1 bg-white flex-1 focus:outline-none focus:ring-1 focus:ring-amber-400">
+                  {subtypeOpts.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+                <button onClick={() => save(h.id)}
+                  className="px-2 py-1 rounded-lg bg-amber-500 text-white text-xs font-medium hover:bg-amber-600 transition-colors">
+                  Save
+                </button>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 // ─── Zerodha Kite live-sync ───────────────────────────────────────────────────
 function KiteLiveSync() {
   const { data, syncKiteHoldings, updateSettings } = useApp()
@@ -213,6 +308,7 @@ function ZerodhaContent() {
         <div>
           <p className="text-[10px] uppercase tracking-widest font-semibold text-surface-400 mb-2">Live sync (demat holdings — stocks, ETFs &amp; MFs)</p>
           <KiteLiveSync />
+          <div className="mt-3"><ClassifyMFCard /></div>
         </div>
       )}
       {isKiteConfigured() && <div className="border-t border-surface-100 pt-1"><p className="text-[10px] uppercase tracking-widest font-semibold text-surface-400 mb-2">XLSX import (MFs &amp; full portfolio)</p></div>}
