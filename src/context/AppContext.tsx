@@ -6,7 +6,7 @@ import type { AppData, NetWorthSnapshot, Transaction, Holding, Debt, Goal, Scena
 import { loadData, saveData, DEFAULT_DATA } from '../lib/storage'
 import { nanoid } from '../lib/nanoid'
 import { refreshAllPrices } from '../lib/livePrice'
-import { isKiteConfigured, isKiteTokenValid, fetchKiteHoldings } from '../lib/kiteConnect'
+import { isKiteConfigured, isKiteTokenValid, fetchKiteSync } from '../lib/kiteConnect'
 
 /** Infer type, assetClass and subType for a new holding coming from Kite,
  *  using the ISIN prefix as the primary signal. */
@@ -81,7 +81,7 @@ interface AppContextValue {
   addSnapshot:          (s: Omit<NetWorthSnapshot, 'id'>) => void
   addOrUpdateSnapshot:  (s: Omit<NetWorthSnapshot, 'id'>) => void
   captureSnapshot:      () => void
-  syncKiteHoldings:     () => Promise<{ updated: number; added: number }>
+  syncKiteHoldings:     () => Promise<{ updated: number; added: number; sips: number }>
   addTransaction:    (t: Omit<Transaction, 'id'>)      => void
   deleteTransaction: (id: string)                      => void
   addHolding:        (h: Omit<Holding, 'id'>)        => void
@@ -205,59 +205,79 @@ export function AppProvider({ children }: { children: ReactNode }) {
     update(snap)
   }, [update])
 
-  // Sync live holdings from Zerodha Kite API — merges into existing holdings by ISIN.
-  // Covers all demat holdings: equity, ETFs, and demat-format mutual funds (INF ISINs).
-  const syncKiteHoldings = useCallback(async (): Promise<{ updated: number; added: number }> => {
+  // Sync live holdings from Zerodha Kite API.
+  // Fetches equity holdings (/portfolio/holdings) AND Coin MF holdings (/mf/holdings)
+  // in one round-trip, plus active SIPs (/mf/sips).
+  // Merges into existing DhanPath holdings by ISIN — preserves classification of
+  // previously-imported holdings and only updates qty/price/value fields.
+  const syncKiteHoldings = useCallback(async (): Promise<{ updated: number; added: number; sips: number }> => {
     const { kiteToken, kiteConnectedAt } = get().settings
     if (!isKiteConfigured()) throw new Error('Kite not configured')
     if (!kiteToken || !isKiteTokenValid(kiteConnectedAt))
       throw new Error('Kite session expired — please reconnect')
 
-    const kiteHoldings = await fetchKiteHoldings(kiteToken)
+    const { equity, mf, sips } = await fetchKiteSync(kiteToken)
     const current = [...get().holdings]
     let updated = 0, added = 0
     const now = new Date().toISOString()
 
-    for (const kh of kiteHoldings) {
-      if (!kh.isin || kh.quantity <= 0) continue
-      const idx = current.findIndex(h => h.ticker === kh.isin)
+    // Helper: upsert one holding by ISIN
+    function upsert(
+      isin: string, name: string, qty: number,
+      avgPrice: number, lastPrice: number,
+      fallbackType: string, fallbackClass: string, fallbackSub: string,
+    ) {
+      if (!isin || qty <= 0) return
+      const idx = current.findIndex(h => h.ticker === isin)
       if (idx >= 0) {
-        // Update price + quantity for existing holding
         current[idx] = {
           ...current[idx],
-          qty:            kh.quantity,
-          avgPrice:       kh.average_price,
-          lastPrice:      kh.last_price,
-          value:          Math.round(kh.quantity * kh.last_price),
-          costBasis:      Math.round(kh.quantity * kh.average_price),
+          qty,
+          avgPrice,
+          lastPrice,
+          value:          Math.round(qty * lastPrice),
+          costBasis:      Math.round(qty * avgPrice),
           priceUpdatedAt: now,
         }
         updated++
       } else {
-        // New holding not yet in DhanPath — classify by ISIN prefix.
-        // INF = demat mutual fund, INE = equity, IN8 = Sovereign Gold Bond, IN0 = G-Sec
-        const { hType, hClass, hSub } = classifyKiteIsin(kh.isin, kh.tradingsymbol)
+        const { hType, hClass, hSub } = classifyKiteIsin(isin, fallbackSub)
         current.push({
           id:             nanoid(),
-          name:           kh.tradingsymbol,
-          ticker:         kh.isin,
-          type:           hType,
-          assetClass:     hClass,
-          subType:        hSub,
-          qty:            kh.quantity,
-          avgPrice:       kh.average_price,
-          lastPrice:      kh.last_price,
-          value:          Math.round(kh.quantity * kh.last_price),
-          costBasis:      Math.round(kh.quantity * kh.average_price),
+          name,
+          ticker:         isin,
+          type:           hType || fallbackType,
+          assetClass:     hClass || fallbackClass,
+          subType:        hSub  || fallbackSub,
+          qty,
+          avgPrice,
+          lastPrice,
+          value:          Math.round(qty * lastPrice),
+          costBasis:      Math.round(qty * avgPrice),
           priceUpdatedAt: now,
         })
         added++
       }
     }
 
+    // 1. Equity stocks + exchange-traded ETFs
+    for (const h of equity) {
+      upsert(h.isin, h.tradingsymbol, h.quantity, h.average_price, h.last_price,
+             'stock', 'Equity', h.tradingsymbol)
+    }
+
+    // 2. Coin mutual funds (separate endpoint, not in /portfolio/holdings)
+    for (const h of mf) {
+      // Use last_price from NAV; if 0 fall back to average_price to avoid zero values
+      const nav = h.last_price > 0 ? h.last_price : h.average_price
+      upsert(h.tradingsymbol, h.fund, h.quantity, h.average_price, nav,
+             'etf', 'Equity', 'Mutual Fund')
+    }
+
+    const activeSips = sips.filter(s => s.status === 'ACTIVE')
     const next = snapshotFromHoldings({ ...get(), holdings: current })
     update(next)
-    return { updated, added }
+    return { updated, added, sips: activeSips.length }
   }, [update])
 
   const addTransaction    = (t: Omit<Transaction, 'id'>) =>

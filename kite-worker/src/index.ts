@@ -1,9 +1,11 @@
 /**
  * DhanPath Kite Auth Worker
- * Handles two things:
- *   GET  /callback  — Zerodha OAuth callback: exchanges request_token → access_token,
- *                     redirects back to DhanPath with the token in the URL fragment.
- *   POST /api/holdings — Proxies Kite API so DhanPath avoids browser CORS restrictions.
+ *
+ * GET  /callback          — OAuth: exchanges request_token → access_token,
+ *                           redirects to DhanPath with token in URL fragment.
+ * POST /api/sync          — Parallel-fetches equity holdings + MF holdings + SIPs
+ *                           in one round-trip; returns combined JSON.
+ *                           (Browser can't call api.kite.trade directly — CORS blocked.)
  */
 
 interface Env {
@@ -21,9 +23,12 @@ const CORS = {
   'Access-Control-Allow-Headers': 'Content-Type',
 }
 
+function kiteHeaders(apiKey: string, token: string) {
+  return { 'X-Kite-Version': '3', 'Authorization': `token ${apiKey}:${token}` }
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
-    // Preflight
     if (request.method === 'OPTIONS') return new Response(null, { headers: CORS })
 
     const url = new URL(request.url)
@@ -33,11 +38,9 @@ export default {
       const requestToken = url.searchParams.get('request_token')
       const status       = url.searchParams.get('status')
 
-      if (status !== 'success' || !requestToken) {
+      if (status !== 'success' || !requestToken)
         return Response.redirect(`${DHANPATH_URL}?kite_error=cancelled`, 302)
-      }
 
-      // checksum = SHA-256( api_key + request_token + api_secret )
       const checksum = await sha256(env.KITE_API_KEY + requestToken + env.KITE_API_SECRET)
 
       const resp = await fetch(`${KITE_API}/session/token`, {
@@ -53,37 +56,58 @@ export default {
 
       const data: any = await resp.json()
       const token = data?.data?.access_token as string | undefined
-
       if (!token) return Response.redirect(`${DHANPATH_URL}?kite_error=no_token`, 302)
 
-      // URL fragment (#) is never sent to any server — safer than query param
       return Response.redirect(`${DHANPATH_URL}#kite_token=${token}`, 302)
     }
 
-    // ── Holdings proxy ──────────────────────────────────────────────────────
-    if (url.pathname === '/api/holdings' && request.method === 'POST') {
+    // ── Combined sync proxy (equity + MF holdings + SIPs in one call) ──────
+    if (url.pathname === '/api/sync' && request.method === 'POST') {
       let token: string | undefined
-      try {
-        const body: any = await request.json()
-        token = body?.token
-      } catch {
+      try { token = ((await request.json()) as any)?.token } catch {
         return new Response('Invalid JSON', { status: 400, headers: CORS })
       }
-
       if (!token) return new Response('Missing token', { status: 400, headers: CORS })
 
-      const kiteResp = await fetch(`${KITE_API}/portfolio/holdings`, {
-        headers: {
-          'X-Kite-Version': '3',
-          'Authorization':  `token ${env.KITE_API_KEY}:${token}`,
-        },
-      })
+      const hdrs = kiteHeaders(env.KITE_API_KEY, token)
 
-      const body = await kiteResp.text()
-      return new Response(body, {
-        status:  kiteResp.status,
+      // All three calls in parallel — fail fast if any 4xx (expired token etc.)
+      const [equityResp, mfResp, sipResp] = await Promise.all([
+        fetch(`${KITE_API}/portfolio/holdings`, { headers: hdrs }),
+        fetch(`${KITE_API}/mf/holdings`,        { headers: hdrs }),
+        fetch(`${KITE_API}/mf/sips`,            { headers: hdrs }),
+      ])
+
+      // Surface auth errors immediately
+      if (equityResp.status === 403 || mfResp.status === 403)
+        return new Response(JSON.stringify({ error: 'token_expired' }), { status: 403, headers: { ...CORS, 'Content-Type': 'application/json' } })
+
+      const [equityData, mfData, sipData] = await Promise.all([
+        equityResp.json() as Promise<any>,
+        mfResp.json()     as Promise<any>,
+        sipResp.json()    as Promise<any>,
+      ])
+
+      const payload = {
+        equity: equityData?.data  ?? [],   // equity + exchange-traded ETFs
+        mf:     mfData?.data      ?? [],   // Coin mutual funds
+        sips:   sipData?.data     ?? [],   // active/paused SIPs
+      }
+
+      return new Response(JSON.stringify(payload), {
         headers: { ...CORS, 'Content-Type': 'application/json' },
       })
+    }
+
+    // Legacy endpoint kept for backwards compat — redirects to /api/sync
+    if (url.pathname === '/api/holdings' && request.method === 'POST') {
+      let token: string | undefined
+      try { token = ((await request.json()) as any)?.token } catch {
+        return new Response('Invalid JSON', { status: 400, headers: CORS })
+      }
+      if (!token) return new Response('Missing token', { status: 400, headers: CORS })
+      const r = await fetch(`${KITE_API}/portfolio/holdings`, { headers: kiteHeaders(env.KITE_API_KEY, token) })
+      return new Response(await r.text(), { status: r.status, headers: { ...CORS, 'Content-Type': 'application/json' } })
     }
 
     return new Response('Not found', { status: 404 })

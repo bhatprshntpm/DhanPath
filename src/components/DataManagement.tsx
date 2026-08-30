@@ -55,7 +55,7 @@ function KiteLiveSync() {
   const { data, syncKiteHoldings, updateSettings } = useApp()
   const { kiteToken, kiteConnectedAt } = data.settings
   const [syncing, setSyncing] = useState(false)
-  const [result,  setResult]  = useState<{ updated: number; added: number } | null>(null)
+  const [result,  setResult]  = useState<{ updated: number; added: number; sips: number } | null>(null)
   const [error,   setError]   = useState<string | null>(null)
 
   const connected = isKiteTokenValid(kiteConnectedAt)
@@ -126,7 +126,9 @@ function KiteLiveSync() {
       {result && (
         <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
           ✓ {result.updated} holding{result.updated !== 1 ? 's' : ''} updated
-          {result.added > 0 ? `, ${result.added} new` : ''} · all demat holdings synced
+          {result.added > 0 ? `, ${result.added} new` : ''}
+          {result.sips > 0 ? ` · ${result.sips} active SIP${result.sips !== 1 ? 's' : ''} found` : ''}
+          {' · '}stocks, ETFs &amp; Coin MFs synced
           {' '}(FDs, EPF, PPF — manual import only)
         </p>
       )}
