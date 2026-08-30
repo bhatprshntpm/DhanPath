@@ -1201,8 +1201,8 @@ function SourceRow({ icon, label, statusLabel, connected, color, children, onCle
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
-export default function DataManagement() {
-  const [open, setOpen]                       = useState(false)
+export default function DataManagement({ alwaysOpen = false }: { alwaysOpen?: boolean }) {
+  const [open, setOpen]                       = useState(alwaysOpen)
   const [showExtra, setShowExtra]             = useState(false)
   const [confirmingReset, setConfirmingReset] = useState(false)
   const { data, replaceData } = useApp()
@@ -1222,29 +1222,31 @@ export default function DataManagement() {
   }
 
   return (
-    <div className="card overflow-hidden">
-      {/* Header */}
-      <button
-        onClick={() => setOpen(v => !v)}
-        className="w-full flex items-center justify-between p-5 hover:bg-surface-50 transition-colors">
-        <div className="text-left">
-          <p className="text-sm font-semibold text-surface-800">Sources</p>
-          <p className="text-xs text-surface-400 mt-0.5">
-            {[zerodhaCount > 0 && `Zerodha (${zerodhaCount})`, fidelityCount > 0 && `Fidelity (${fidelityCount})`, epfHoldings.length > 0 && 'EPF', ppfHoldings.length > 0 && 'PPF/NPS', cryptoCount > 0 && `Crypto (${cryptoCount})`].filter(Boolean).join(' · ') || 'No data imported yet'}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {confirmingReset && <span className="text-[11px] text-rose-500 font-medium">Tap again to confirm</span>}
-          <button
-            onClick={e => { e.stopPropagation(); handleResetAll() }}
-            onBlur={() => setConfirmingReset(false)}
-            className={`flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-lg border transition-colors
-              ${confirmingReset ? 'border-rose-400 bg-rose-50 text-rose-600' : 'border-surface-200 text-surface-400 hover:text-rose-500 hover:border-rose-200'}`}>
-            <RotateCcw size={10} /> Reset all
-          </button>
-          {open ? <ChevronDown size={16} className="text-surface-400" /> : <ChevronRight size={16} className="text-surface-400" />}
-        </div>
-      </button>
+    <div className={alwaysOpen ? '' : 'card overflow-hidden'}>
+      {/* Header — hidden in alwaysOpen mode since the panel itself acts as the container */}
+      {!alwaysOpen && (
+        <button
+          onClick={() => setOpen(v => !v)}
+          className="w-full flex items-center justify-between p-5 hover:bg-surface-50 transition-colors">
+          <div className="text-left">
+            <p className="text-sm font-semibold text-surface-800">Sources</p>
+            <p className="text-xs text-surface-400 mt-0.5">
+              {[zerodhaCount > 0 && `Zerodha (${zerodhaCount})`, fidelityCount > 0 && `Fidelity (${fidelityCount})`, epfHoldings.length > 0 && 'EPF', ppfHoldings.length > 0 && 'PPF/NPS', cryptoCount > 0 && `Crypto (${cryptoCount})`].filter(Boolean).join(' · ') || 'No data imported yet'}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {confirmingReset && <span className="text-[11px] text-rose-500 font-medium">Tap again to confirm</span>}
+            <button
+              onClick={e => { e.stopPropagation(); handleResetAll() }}
+              onBlur={() => setConfirmingReset(false)}
+              className={`flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-lg border transition-colors
+                ${confirmingReset ? 'border-rose-400 bg-rose-50 text-rose-600' : 'border-surface-200 text-surface-400 hover:text-rose-500 hover:border-rose-200'}`}>
+              <RotateCcw size={10} /> Reset all
+            </button>
+            {open ? <ChevronDown size={16} className="text-surface-400" /> : <ChevronRight size={16} className="text-surface-400" />}
+          </div>
+        </button>
+      )}
 
       {open && (
         <div className="border-t border-surface-100 animate-fade-up">

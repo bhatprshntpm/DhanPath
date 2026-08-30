@@ -188,7 +188,6 @@ export default function FinancialArc({ onOpenSettings }: { onOpenSettings?: () =
   const [view,      setView]      = useState<ViewMode>('10yr')
   const [showTable,       setShowTable]       = useState(false)
   const [hoverYear,        setHoverYear]        = useState<number | null>(null)
-  const [showAssumptions,  setShowAssumptions]  = useState(false)
 
   const currentYear  = new Date().getFullYear()
   const baseline     = scenarios.find(s => s.enabled && s.id === 'baseline') ?? scenarios.find(s => s.enabled)
@@ -434,48 +433,30 @@ export default function FinancialArc({ onOpenSettings }: { onOpenSettings?: () =
             <p className="text-xs text-surface-300 mt-0.5">{fmtINR(nwNow)} today</p>
           )}
 
-          {/* Assumptions — collapsed by default */}
+          {/* Always-visible assumption chips */}
           {fireAgeCur && (() => {
-            const yearsToRetire = fireAgeCur - settings.currentAge
-            const inflatedExpenses = Math.round((settings.monthlyExpenses ?? 0) * Math.pow(1 + (settings.inflationRate ?? 6) / 100, Math.max(yearsToRetire, 0)))
+            const yearsToRetire    = Math.max(fireAgeCur - settings.currentAge, 0)
+            const inflatedExpenses = Math.round((settings.monthlyExpenses ?? 0) * Math.pow(1 + (settings.inflationRate ?? 6) / 100, yearsToRetire))
+            const sipAtRetire      = yearsToRetire > 0 ? Math.round(activeSIP * Math.pow(1 + (baseAssump?.sipStepUp ?? 10) / 100, yearsToRetire)) : activeSIP
             return (
-              <div className="mt-1.5">
-                <button
-                  onClick={() => setShowAssumptions(v => !v)}
-                  className="flex items-center gap-1 text-[10px] text-surface-400 hover:text-amber-600 transition-colors">
-                  <ChevronRight size={10} className={`transition-transform ${showAssumptions ? 'rotate-90' : ''}`} />
-                  Assumptions {showAssumptions ? '' : `· ${fmtINR(corpusAtFire)} corpus · ${settings.inflationRate ?? 6}% inflation`}
-                </button>
-                {showAssumptions && (
-                  <div className="mt-2 p-3 bg-amber-50/60 rounded-xl border border-amber-100/80 text-[11px] flex flex-col gap-1.5">
-                    <div className="flex items-center justify-between mb-0.5">
-                      <span className="text-[10px] font-semibold uppercase tracking-widest text-amber-600">Assumptions</span>
-                      {onOpenSettings && (
-                        <button onClick={onOpenSettings} className="text-[10px] text-amber-600 hover:text-amber-800 underline underline-offset-2 transition-colors">
-                          Edit
-                        </button>
-                      )}
-                    </div>
-                    <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
-                      <span className="text-surface-400">Corpus at FIRE</span>
-                      <span className="font-semibold text-surface-800">{fmtINR(corpusAtFire)} <span className="font-normal text-surface-400">— enough to last to age {settings.lifeExpectancy}</span></span>
-                      <span className="text-surface-400">Monthly spend at retirement</span>
-                      <span className="font-semibold">{fmtINR(inflatedExpenses)}/mo <span className="font-normal text-surface-400">(today’s {fmtINR(settings.monthlyExpenses ?? 0)} × {yearsToRetire > 0 ? `${settings.inflationRate ?? 6}% inflation for ${yearsToRetire} yrs` : 'already at retirement age'})</span></span>
-                      <span className="text-surface-400">SIP / investments</span>
-                      <span className="font-semibold">{fmtINR(activeSIP)}/mo today
-                        {(baseAssump?.sipStepUp ?? 10) > 0 && yearsToRetire > 0 && (
-                          <span className="font-normal text-surface-400"> · steps up {baseAssump?.sipStepUp ?? 10}%/yr → {fmtINR(Math.round(activeSIP * Math.pow(1 + (baseAssump?.sipStepUp ?? 10) / 100, yearsToRetire)))}/mo by retirement</span>
-                        )}
-                      </span>
-                      <span className="text-surface-400">Income growth</span>
-                      <span className="font-semibold text-surface-700">{baseAssump?.incomeGrowthRate ?? 5}%/yr <span className="font-normal text-surface-400">salary assumed to grow this rate during accumulation</span></span>
-                      <span className="text-surface-400">In retirement</span>
-                      <span className="font-semibold text-surface-700">No salary, no SIP — corpus grows at {blendedRet}%, withdrawals grow at {settings.inflationRate ?? 6}%/yr</span>
-                    </div>
-                    {(settings.monthlyExpenses ?? 0) === 60000 && (
-                      <p className="text-amber-700 border-t border-amber-200 pt-1.5">⚠ Monthly expenses look like the default (₹60k). Update in Settings for accurate results.</p>
-                    )}
-                  </div>
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                <span className="text-[10px] bg-surface-100 text-surface-600 px-2 py-0.5 rounded-full">{blendedRet}% return</span>
+                <span className="text-[10px] bg-surface-100 text-surface-600 px-2 py-0.5 rounded-full">{settings.inflationRate ?? 6}% inflation</span>
+                <span className="text-[10px] bg-surface-100 text-surface-600 px-2 py-0.5 rounded-full">
+                  {fmtINR(settings.monthlyExpenses ?? 0)}/mo → {fmtINR(inflatedExpenses)} at retirement
+                </span>
+                <span className="text-[10px] bg-surface-100 text-surface-600 px-2 py-0.5 rounded-full">
+                  {fmtINR(activeSIP)}/mo SIP{yearsToRetire > 0 && (baseAssump?.sipStepUp ?? 0) > 0 ? ` → ${fmtINR(sipAtRetire)} at retirement` : ''}
+                </span>
+                {(settings.monthlyExpenses ?? 0) === 60000 && (
+                  <span className="text-[10px] bg-amber-50 text-amber-600 border border-amber-200 px-2 py-0.5 rounded-full">
+                    ⚠ Expenses look like default — update in Settings
+                  </span>
+                )}
+                {onOpenSettings && (
+                  <button onClick={onOpenSettings} className="text-[10px] text-surface-400 hover:text-amber-600 underline underline-offset-2 transition-colors">
+                    Edit
+                  </button>
                 )}
               </div>
             )
